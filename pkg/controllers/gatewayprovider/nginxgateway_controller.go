@@ -7,7 +7,6 @@ import (
 
 	"github.com/cnoe-io/idpbuilder/api/v1alpha1"
 	"github.com/cnoe-io/idpbuilder/api/v1alpha2"
-	"github.com/cnoe-io/idpbuilder/globals"
 	"github.com/cnoe-io/idpbuilder/pkg/controllers/localbuild"
 	"github.com/cnoe-io/idpbuilder/pkg/k8s"
 	"k8s.io/apimachinery/pkg/api/errors"
