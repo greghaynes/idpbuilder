@@ -67,14 +67,22 @@ func RunControllers(
 		logger.Error(err, "unable to create custom package controller")
 	}
 
-	// Register v1alpha2 controllers
+	// Run Platform controller
+	if err := (&platform.PlatformReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		logger.Error(err, "unable to create platform controller")
+		return err
+	}
+
 	// Run GiteaProvider controller
 	if err := (&gitprovider.GiteaProviderReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 		Config: cfg,
 	}).SetupWithManager(mgr); err != nil {
-		logger.Error(err, "unable to create giteaprovider controller")
+		logger.Error(err, "unable to create GiteaProvider controller")
 		return err
 	}
 
@@ -85,15 +93,6 @@ func RunControllers(
 		Config: cfg,
 	}).SetupWithManager(mgr); err != nil {
 		logger.Error(err, "unable to create nginxgateway controller")
-		return err
-	}
-
-	// Run Platform controller
-	if err := (&platform.PlatformReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		logger.Error(err, "unable to create platform controller")
 		return err
 	}
 
