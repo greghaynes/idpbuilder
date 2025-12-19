@@ -6,7 +6,6 @@ import (
 	"fmt"
 
 	"github.com/cnoe-io/idpbuilder/api/v1alpha2"
-	"github.com/cnoe-io/idpbuilder/globals"
 	"github.com/cnoe-io/idpbuilder/pkg/k8s"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -91,11 +90,6 @@ func (r *NginxGatewayReconciler) installNginx(ctx context.Context, nginxGateway 
 	logger.Info("Installing Nginx", "namespace", nginxGateway.Spec.Namespace)
 
 	// Ensure namespace exists
-	ns := &corev1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: nginxGateway.Spec.Namespace,
-		},
-	}
 	if err := k8s.EnsureNamespace(ctx, r.Client, nginxGateway.Spec.Namespace); err != nil {
 		return fmt.Errorf("failed to ensure namespace: %w", err)
 	}

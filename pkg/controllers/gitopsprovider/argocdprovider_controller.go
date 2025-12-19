@@ -211,7 +211,7 @@ func (r *ArgoCDProviderReconciler) updateStatus(ctx context.Context, argocdProvi
 	// Try to get external endpoint from ingress or load balancer
 	// For now, we'll set a placeholder that can be updated by the platform controller
 	// based on the gateway configuration
-	argocdProvider.Status.Endpoint = fmt.Sprintf("https://argocd.%s", globals.GetDomain())
+	argocdProvider.Status.Endpoint = fmt.Sprintf("https://argocd.%s", globals.DefaultHostName)
 
 	// Set credentials secret reference
 	secretName := "argocd-admin-secret"
