@@ -5,7 +5,7 @@ import (
 
 	"github.com/cnoe-io/idpbuilder/api/v1alpha1"
 	"github.com/cnoe-io/idpbuilder/pkg/controllers/custompackage"
-	"github.com/cnoe-io/idpbuilder/pkg/controllers/gitprovider"
+	"github.com/cnoe-io/idpbuilder/pkg/controllers/gitprovider/gitea"
 	"github.com/cnoe-io/idpbuilder/pkg/controllers/platform"
 	"github.com/cnoe-io/idpbuilder/pkg/util"
 
@@ -76,7 +76,7 @@ func RunControllers(
 	}
 
 	// Run GiteaProvider controller
-	if err := (&gitprovider.GiteaProviderReconciler{
+	if err := (&gitea.GiteaProviderReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 		Config: cfg,

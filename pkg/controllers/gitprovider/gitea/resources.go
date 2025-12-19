@@ -1,4 +1,4 @@
-package gitprovider
+package gitea
 
 // This file is a placeholder for future resources specific to git providers.
 // Currently, the Gitea installation resources are accessed via the localbuild package's
