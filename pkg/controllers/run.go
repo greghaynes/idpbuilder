@@ -5,6 +5,10 @@ import (
 
 	"github.com/cnoe-io/idpbuilder/api/v1alpha1"
 	"github.com/cnoe-io/idpbuilder/pkg/controllers/custompackage"
+	"github.com/cnoe-io/idpbuilder/pkg/controllers/gatewayprovider"
+	"github.com/cnoe-io/idpbuilder/pkg/controllers/gitopsprovider"
+	"github.com/cnoe-io/idpbuilder/pkg/controllers/gitprovider"
+	"github.com/cnoe-io/idpbuilder/pkg/controllers/platform"
 	"github.com/cnoe-io/idpbuilder/pkg/util"
 
 	"github.com/cnoe-io/idpbuilder/pkg/controllers/gitrepository"
@@ -63,6 +67,45 @@ func RunControllers(
 	if err != nil {
 		logger.Error(err, "unable to create custom package controller")
 	}
+
+	// Register v1alpha2 controllers (Phase 1.2 and 1.3)
+	
+	// Platform controller
+	if err := (&platform.PlatformReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		logger.Error(err, "unable to create platform controller")
+		return err
+	}
+
+	// GiteaProvider controller (already exists from phase 1.1)
+	if err := (&gitprovider.GiteaProviderReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		logger.Error(err, "unable to create giteaprovider controller")
+		return err
+	}
+
+	// NginxGateway controller (Phase 1.2)
+	if err := (&gatewayprovider.NginxGatewayReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		logger.Error(err, "unable to create nginxgateway controller")
+		return err
+	}
+
+	// ArgoCDProvider controller (Phase 1.3)
+	if err := (&gitopsprovider.ArgoCDProviderReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		logger.Error(err, "unable to create argocdprovider controller")
+		return err
+	}
+
 	// Start our manager in another goroutine
 	logger.V(1).Info("starting manager")
 
