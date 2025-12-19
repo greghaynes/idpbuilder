@@ -69,7 +69,7 @@ func RunControllers(
 	}
 
 	// Register v1alpha2 controllers (Phase 1.2 and 1.3)
-	
+
 	// Platform controller
 	if err := (&platform.PlatformReconciler{
 		Client: mgr.GetClient(),

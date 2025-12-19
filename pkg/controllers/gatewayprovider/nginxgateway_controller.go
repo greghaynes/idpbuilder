@@ -138,7 +138,7 @@ func (r *NginxGatewayReconciler) updateStatus(ctx context.Context, nginxGateway 
 	nginxGateway.Status.Installed = true
 	nginxGateway.Status.Phase = "Ready"
 	nginxGateway.Status.Version = nginxGateway.Spec.Version
-	
+
 	// Set ingress class name
 	ingressClassName := nginxGateway.Spec.IngressClass.Name
 	if ingressClassName == "" {
@@ -147,7 +147,7 @@ func (r *NginxGatewayReconciler) updateStatus(ctx context.Context, nginxGateway 
 	nginxGateway.Status.IngressClassName = ingressClassName
 
 	// Set internal endpoint
-	nginxGateway.Status.InternalEndpoint = fmt.Sprintf("http://%s.%s.svc.cluster.local", 
+	nginxGateway.Status.InternalEndpoint = fmt.Sprintf("http://%s.%s.svc.cluster.local",
 		svc.Name, svc.Namespace)
 
 	// Try to get load balancer endpoint
