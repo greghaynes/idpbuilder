@@ -2,12 +2,12 @@ package gatewayprovider
 
 import (
 	"context"
+	"embed"
 	"fmt"
 	"time"
 
 	"github.com/cnoe-io/idpbuilder/api/v1alpha1"
 	"github.com/cnoe-io/idpbuilder/api/v1alpha2"
-	"github.com/cnoe-io/idpbuilder/pkg/controllers/localbuild"
 	"github.com/cnoe-io/idpbuilder/pkg/k8s"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -21,6 +21,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
+
+//go:embed resources/nginx/k8s/*
+var installNginxFS embed.FS
 
 const (
 	nginxGatewayFinalizer      = "nginxgateway.idpbuilder.cnoe.io/finalizer"
@@ -177,7 +180,7 @@ func (r *NginxGatewayReconciler) reconcileNginx(ctx context.Context, gateway *v1
 		return ctrl.Result{}, fmt.Errorf("ensuring namespace: %w", err)
 	}
 
-	// Install Nginx resources using embedded manifests from localbuild package
+	// Install Nginx resources using embedded manifests
 	if err := r.installNginxResources(ctx, gateway); err != nil {
 		return ctrl.Result{}, fmt.Errorf("installing Nginx resources: %w", err)
 	}
@@ -186,13 +189,12 @@ func (r *NginxGatewayReconciler) reconcileNginx(ctx context.Context, gateway *v1
 	return ctrl.Result{}, nil
 }
 
-// installNginxResources installs Nginx using embedded manifests from localbuild package
+// installNginxResources installs Nginx using embedded manifests
 func (r *NginxGatewayReconciler) installNginxResources(ctx context.Context, gateway *v1alpha2.NginxGateway) error {
 	logger := log.FromContext(ctx)
 
-	// Use the exported function from localbuild package to get raw Nginx resources
-	// Pass the template data that might be used for customization
-	rawResources, err := localbuild.RawNginxInstallResources(r.Config, v1alpha1.PackageCustomization{}, r.Scheme)
+	// Use embedded resources from this package
+	rawResources, err := k8s.BuildCustomizedManifests("", "resources/nginx/k8s", installNginxFS, r.Scheme, r.Config)
 	if err != nil {
 		return fmt.Errorf("getting Nginx manifests: %w", err)
 	}
