@@ -353,6 +353,13 @@ status:
 
 **Reference**: https://docs.aws.amazon.com/eks/latest/userguide/capabilities.html
 
+> **Note**: This specification documents EKS Capabilities based on the problem statement reference. If this AWS feature is not yet publicly available or is in preview, this section represents a proposed design for how an AWS-native GitOps provider could integrate with the idpbuilder architecture. Alternative AWS GitOps implementations could use:
+> - **Flux** with AWS-specific integrations (CodeCommit, IRSA, CloudWatch)
+> - **ArgoCD** with AWS-specific integrations (similar to open-source but with AWS optimizations)
+> - Future AWS-managed GitOps solutions as they become available
+>
+> Platform teams should verify the current availability of EKS Capabilities and choose an appropriate GitOps provider for their AWS deployments.
+
 
 #### EKSCapabilitiesProvider CRD
 
@@ -1269,7 +1276,7 @@ This specification extends the controller-based architecture to support native c
 
 **Key Takeaways**:
 
-1. **AWS EKS Capabilities** is the only hyperscaler-unique GitOps provider, offering deep EKS integration
+1. **AWS EKS Capabilities** is documented as a hyperscaler-unique GitOps provider concept for deep EKS integration (subject to AWS feature availability - see note in AWS section)
 2. All hyperscaler providers adhere to duck-typed interfaces for interoperability
 3. Mixed provider scenarios are fully supported (e.g., AWS CodeCommit + ArgoCD)
 4. Each cloud provider's native IAM and security features are leveraged
@@ -1277,17 +1284,20 @@ This specification extends the controller-based architecture to support native c
 
 **Next Steps**:
 
-1. Community review and feedback on CRD schemas
-2. Reference implementation for AWS providers (starting with CodeCommit)
-3. Reference implementation for Azure providers
-4. Reference implementation for GCP providers
-5. Implementation concerns documentation (Phase 2)
-6. Integration testing across provider combinations
-7. Cost optimization guidance and best practices
+1. Validate AWS EKS Capabilities availability and update specification accordingly
+2. Community review and feedback on CRD schemas
+3. Reference implementation for AWS providers (starting with CodeCommit)
+4. Reference implementation for Azure providers
+5. Reference implementation for GCP providers
+6. Implementation concerns documentation (Phase 2)
+7. Integration testing across provider combinations
+8. Cost optimization guidance and best practices
 
 ---
 
 **Document Status**: Draft for community review
+
+**Important**: The AWS EKS Capabilities section represents a proposed design based on the problem statement. Platform teams should verify feature availability before implementation.
 
 **Feedback**: Please provide feedback via GitHub issues or discussions in the idpbuilder repository.
 
