@@ -306,7 +306,7 @@ func TestNginxGatewayDeletion(t *testing.T) {
 	_, err := reconciler.Reconcile(ctx, req)
 	assert.NoError(t, err)
 
-	// Verify finalizer was removed  
+	// Verify finalizer was removed
 	updatedGateway := &v1alpha2.NginxGateway{}
 	err = fakeClient.Get(ctx, client.ObjectKey{
 		Name:      nginxGateway.Name,
