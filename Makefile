@@ -25,7 +25,7 @@ HELM_TGZ ?= $(LOCALBIN)/helm.tar.gz
 HELM ?= $(LOCALBIN)/helm
 
 ## Tool Versions
-CONTROLLER_TOOLS_VERSION ?= v0.16.5
+CONTROLLER_TOOLS_VERSION ?= v0.20.0
 KUSTOMIZE_VERSION ?= v5.5.0
 
 .PHONY: fmt
@@ -49,8 +49,8 @@ test-timing: manifests generate fmt vet ## Run tests and generate timing analysi
 	@echo "Running tests with JSON output..."
 	go test --tags=integration -v -timeout 30m ./... -json 2>&1 | tee test-output.json
 	@echo "Generating test timing analysis..."
-	python3 scripts/analyze_test_times.py test-output.json docs/test-timing-analysis.md
-	@echo "Report saved to docs/test-timing-analysis.md"
+	python3 scripts/analyze_test_times.py test-output.json docs/implementation/test-timing-analysis.md
+	@echo "Report saved to docs/implementation/test-timing-analysis.md"
 	@rm -f test-output.json
 	
 
