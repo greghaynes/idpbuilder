@@ -2,7 +2,6 @@ package gitea
 
 import (
 	"context"
-	"embed"
 	"encoding/base64"
 	"fmt"
 	"net/http"
@@ -11,6 +10,7 @@ import (
 	"github.com/cnoe-io/idpbuilder/api/v1alpha1"
 	"github.com/cnoe-io/idpbuilder/api/v1alpha2"
 	"github.com/cnoe-io/idpbuilder/pkg/k8s"
+	"github.com/cnoe-io/idpbuilder/pkg/resources/gitea"
 	"github.com/cnoe-io/idpbuilder/pkg/util"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -31,14 +31,6 @@ const (
 	defaultRequeueTime     = time.Second * 30
 	giteaDeploymentName    = "my-gitea"
 )
-
-//go:embed resources/k8s/*
-var InstallGiteaFS embed.FS
-
-// RawGiteaInstallResources returns the raw Gitea installation resources
-func RawGiteaInstallResources(templateData any, config v1alpha1.PackageCustomization, scheme *runtime.Scheme) ([][]byte, error) {
-	return k8s.BuildCustomizedManifests(config.FilePath, "resources/k8s", InstallGiteaFS, scheme, templateData)
-}
 
 // GiteaProviderReconciler reconciles a GiteaProvider object
 type GiteaProviderReconciler struct {
@@ -196,12 +188,12 @@ func (r *GiteaProviderReconciler) reconcileGitea(ctx context.Context, provider *
 	return ctrl.Result{}, nil
 }
 
-// installGiteaResources installs Gitea using embedded manifests
+// installGiteaResources installs Gitea using embedded manifests from gitea package
 func (r *GiteaProviderReconciler) installGiteaResources(ctx context.Context, provider *v1alpha2.GiteaProvider) error {
 	logger := log.FromContext(ctx)
 
-	// Use the embedded Gitea resources
-	rawResources, err := k8s.BuildCustomizedManifests(v1alpha1.PackageCustomization{}.FilePath, "resources/k8s", InstallGiteaFS, r.Scheme, r.Config)
+	// Use the exported function from gitea package to get raw Gitea resources
+	rawResources, err := gitea.RawGiteaInstallResources(r.Config, v1alpha1.PackageCustomization{}, r.Scheme)
 	if err != nil {
 		return fmt.Errorf("getting Gitea manifests: %w", err)
 	}

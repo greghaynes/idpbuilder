@@ -2,16 +2,13 @@ package localbuild
 
 import (
 	"context"
-	"encoding/base64"
 	"fmt"
-	"net/http"
 
 	"github.com/cnoe-io/idpbuilder/api/v1alpha1"
-	"github.com/cnoe-io/idpbuilder/pkg/controllers/gitprovider/gitea"
+	"github.com/cnoe-io/idpbuilder/pkg/resources/gitea"
 	"github.com/cnoe-io/idpbuilder/pkg/util"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
@@ -25,12 +22,7 @@ func RawGiteaInstallResources(templateData any, config v1alpha1.PackageCustomiza
 }
 
 func (r *LocalbuildReconciler) newGiteaAdminSecret(password string) corev1.Secret {
-	obj := util.GiteaAdminSecretObject()
-	obj.StringData = map[string]string{
-		"username": v1alpha1.GiteaAdminUserName,
-		"password": password,
-	}
-	return obj
+	return gitea.NewGiteaAdminSecret(password)
 }
 
 func (r *LocalbuildReconciler) ReconcileGitea(ctx context.Context, req ctrl.Request, resource *v1alpha1.Localbuild) (ctrl.Result, error) {
@@ -38,7 +30,7 @@ func (r *LocalbuildReconciler) ReconcileGitea(ctx context.Context, req ctrl.Requ
 	giteaInstall := EmbeddedInstallation{
 		name:         "Gitea",
 		resourcePath: "resources/k8s",
-		resourceFS:   gitea.InstallGiteaFS,
+		resourceFS:   gitea.GetInstallFS(),
 		namespace:    util.GiteaNamespace,
 		monitoredResources: map[string]schema.GroupVersionKind{
 			"my-gitea": {
@@ -86,20 +78,16 @@ func (r *LocalbuildReconciler) ReconcileGitea(ctx context.Context, req ctrl.Requ
 
 	// need this to ensure gitrepository controller can reach the api endpoint.
 	logger.V(1).Info("checking gitea api endpoint", "url", baseUrl)
-	c := util.GetHttpClient()
-	resp, err := c.Get(baseUrl)
+	ready, err := gitea.CheckGiteaEndpoint(baseUrl)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
-	if resp != nil {
-		resp.Body.Close()
-		if resp.StatusCode != http.StatusOK {
-			logger.V(1).Info("gitea manifests installed successfully. endpoint not ready", "statusCode", resp.StatusCode)
-			return ctrl.Result{RequeueAfter: errRequeueTime}, nil
-		}
+	if !ready {
+		logger.V(1).Info("gitea manifests installed successfully. endpoint not ready")
+		return ctrl.Result{RequeueAfter: errRequeueTime}, nil
 	}
 
-	err = r.setGiteaToken(ctx, sec, baseUrl)
+	err = gitea.SetGiteaToken(ctx, r.Client, sec, baseUrl)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("creating gitea token: %w", err)
 	}
@@ -110,39 +98,4 @@ func (r *LocalbuildReconciler) ReconcileGitea(ctx context.Context, req ctrl.Requ
 	resource.Status.Gitea.AdminUserSecretNamespace = util.GiteaNamespace
 	resource.Status.Gitea.Available = true
 	return ctrl.Result{}, nil
-}
-
-func (r *LocalbuildReconciler) setGiteaToken(ctx context.Context, secret corev1.Secret, baseUrl string) error {
-	_, ok := secret.Data[util.GiteaAdminTokenFieldName]
-	if ok {
-		return nil
-	}
-
-	u := unstructured.Unstructured{}
-	u.SetName(util.GiteaAdminSecret)
-	u.SetNamespace(util.GiteaNamespace)
-	u.SetGroupVersionKind(corev1.SchemeGroupVersion.WithKind("Secret"))
-
-	user, ok := secret.Data["username"]
-	if !ok {
-		return fmt.Errorf("username field not found in gitea secret")
-	}
-
-	pass, ok := secret.Data["password"]
-	if !ok {
-		return fmt.Errorf("password field not found in gitea secret")
-	}
-
-	t, err := util.GetGiteaToken(ctx, baseUrl, string(user), string(pass))
-	if err != nil {
-		return fmt.Errorf("getting gitea token: %w", err)
-	}
-
-	token := base64.StdEncoding.EncodeToString([]byte(t))
-	err = unstructured.SetNestedField(u.Object, token, "data", util.GiteaAdminTokenFieldName)
-	if err != nil {
-		return fmt.Errorf("setting gitea token field: %w", err)
-	}
-
-	return r.Client.Patch(ctx, &u, client.Apply, client.ForceOwnership, client.FieldOwner(v1alpha1.FieldManager))
 }
