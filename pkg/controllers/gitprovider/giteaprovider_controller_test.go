@@ -23,12 +23,12 @@ func TestGiteaProviderReconciler_Reconcile(t *testing.T) {
 	scheme := k8s.GetScheme()
 
 	tests := []struct {
-		name              string
-		provider          *v1alpha2.GiteaProvider
-		expectedPhase     string
-		expectFinalizer   bool
-		expectError       bool
-		skipReconcile     bool
+		name            string
+		provider        *v1alpha2.GiteaProvider
+		expectedPhase   string
+		expectFinalizer bool
+		expectError     bool
+		skipReconcile   bool
 	}{
 		{
 			name: "new giteaprovider gets finalizer",
@@ -47,10 +47,10 @@ func TestGiteaProviderReconciler_Reconcile(t *testing.T) {
 					},
 				},
 			},
-			expectedPhase:   "",  // We'll check after the first reconcile that adds finalizer
+			expectedPhase:   "", // We'll check after the first reconcile that adds finalizer
 			expectFinalizer: true,
 			expectError:     false,
-			skipReconcile:   false,  // Only do one reconcile to add finalizer
+			skipReconcile:   false, // Only do one reconcile to add finalizer
 		},
 	}
 

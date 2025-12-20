@@ -124,23 +124,7 @@ func (r *LocalbuildReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			}
 		}
 
-		// Check if the Gitea credentials secret exists
-		giteaAdminPassword, err := r.extractGiteaAdminSecret(ctx)
-		if err != nil {
-			// Gitea admin secret is not yet available ...
-			return ctrl.Result{RequeueAfter: defaultRequeueTime}, nil
-		}
-		logger.V(1).Info("Gitea admin secret found ...")
-		// Secret containing the gitea password exists
-		// Lets try to update the password
-		if giteaAdminPassword != "" && giteaAdminPassword != util.StaticPassword {
-			err = r.updateGiteaPassword(ctx, giteaAdminPassword)
-			if err != nil {
-				return ctrl.Result{}, err
-			} else {
-				logger.V(1).Info(fmt.Sprintf("Gitea admin password change succeeded !"))
-			}
-		}
+		// NOTE: Gitea password management removed - now handled by GiteaProvider controller
 	}
 
 	logger.V(1).Info("done installing core packages. passing control to argocd")
@@ -160,7 +144,6 @@ func (r *LocalbuildReconciler) installCorePackages(ctx context.Context, req ctrl
 	installers := map[string]subReconciler{
 		v1alpha1.IngressNginxPackageName: r.ReconcileNginx,
 		v1alpha1.ArgoCDPackageName:       r.ReconcileArgo,
-		v1alpha1.GiteaPackageName:        r.ReconcileGitea,
 	}
 	logger.V(1).Info("installing core packages")
 	for k, v := range installers {

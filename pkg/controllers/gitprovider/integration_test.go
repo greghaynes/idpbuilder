@@ -28,7 +28,7 @@ import (
 // 3. GiteaProvider controller creates Gitea deployment
 // 4. Platform controller aggregates GiteaProvider status
 // NOTE: This test is skipped because it requires envtest or a real cluster
-// to properly test the Gitea deployment. The unit tests below cover the 
+// to properly test the Gitea deployment. The unit tests below cover the
 // critical workflow validation.
 func TestPlatformGiteaProviderWorkflow(t *testing.T) {
 	t.Skip("Requires envtest environment for full Gitea installation")
@@ -282,7 +282,7 @@ func TestGiteaProviderCreatesDeployment(t *testing.T) {
 
 	// The GiteaProvider should be in Installing phase
 	assert.Equal(t, "Installing", updated.Status.Phase)
-	
+
 	// Verify that the reconciler attempted to install resources
 	// (In a real environment, this would create deployment, service, etc.)
 	// For unit test, we just verify the controller set the correct phase
