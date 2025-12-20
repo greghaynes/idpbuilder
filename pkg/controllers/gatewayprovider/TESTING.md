@@ -80,6 +80,8 @@ go test -v -tags=integration ./pkg/controllers/gatewayprovider/... -run TestNgin
 
 ### Status Fields (Duck-Typed)
 
+The following fields match the JSON field names in the API:
+
 - `ingressClassName`: The ingress class name to use
 - `loadBalancerEndpoint`: External endpoint for accessing services
 - `internalEndpoint`: Cluster-internal API endpoint

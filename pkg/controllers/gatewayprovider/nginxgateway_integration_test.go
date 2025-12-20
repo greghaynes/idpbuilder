@@ -154,11 +154,9 @@ func TestNginxGatewayIntegration(t *testing.T) {
 
 	// Verify deployment is ready
 	if err == nil {
-		t.Logf("Deployment status: Replicas=%d, ReadyReplicas=%d", 
-			deployment.Status.Replicas, deployment.Status.ReadyReplicas)
+		t.Logf("Deployment status: Replicas=%d, ReadyReplicas=%d", deployment.Status.Replicas, deployment.Status.ReadyReplicas)
 		assert.Greater(t, deployment.Status.Replicas, int32(0), "Deployment should have replicas")
-		assert.Equal(t, deployment.Status.Replicas, deployment.Status.ReadyReplicas, 
-			"All replicas should be ready")
+		assert.Equal(t, deployment.Status.Replicas, deployment.Status.ReadyReplicas, "All replicas should be ready")
 	}
 
 	// Verify service exists

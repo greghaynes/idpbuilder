@@ -76,8 +76,8 @@ func (r *LocalbuildReconciler) ensureNginxGatewayExists(ctx context.Context, res
 	// If not found, create it
 	if err != nil {
 		logger.V(1).Info("NginxGateway not found, creating...")
-		_, createErr := r.ReconcileNginxGateway(ctx, ctrl.Request{}, resource)
-		return createErr
+		_, err := r.ReconcileNginxGateway(ctx, ctrl.Request{}, resource)
+		return err
 	}
 
 	logger.V(1).Info("NginxGateway already exists")
