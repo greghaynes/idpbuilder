@@ -31,16 +31,35 @@ if [ -d "$DOCS_SOURCE_DIR" ]; then
     mkdir -p "$OUTPUT_DIR/docs/user"
     mkdir -p "$OUTPUT_DIR/docs/images"
     
-    # Copy documentation files
-    cp -r "$DOCS_SOURCE_DIR/specs"/* "$OUTPUT_DIR/docs/specs/" 2>/dev/null || true
-    cp -r "$DOCS_SOURCE_DIR/implementation"/* "$OUTPUT_DIR/docs/implementation/" 2>/dev/null || true
-    cp -r "$DOCS_SOURCE_DIR/user"/* "$OUTPUT_DIR/docs/user/" 2>/dev/null || true
+    # Copy markdown files (will be converted to HTML next)
+    cp -r "$DOCS_SOURCE_DIR/specs"/*.md "$OUTPUT_DIR/docs/specs/" 2>/dev/null || true
+    cp -r "$DOCS_SOURCE_DIR/implementation"/*.md "$OUTPUT_DIR/docs/implementation/" 2>/dev/null || true
+    cp -r "$DOCS_SOURCE_DIR/user"/*.md "$OUTPUT_DIR/docs/user/" 2>/dev/null || true
     cp -r "$DOCS_SOURCE_DIR/images"/* "$OUTPUT_DIR/docs/images/" 2>/dev/null || true
     
     # Copy main docs README if it exists
     [ -f "$DOCS_SOURCE_DIR/README.md" ] && cp "$DOCS_SOURCE_DIR/README.md" "$OUTPUT_DIR/docs/README.md"
     
     echo "Documentation copied successfully!"
+    
+    # Convert markdown to HTML
+    echo "Converting markdown documentation to HTML..."
+    if command -v node >/dev/null 2>&1; then
+        if [ -f "./scripts/convert-markdown.js" ]; then
+            DOCS_SOURCE_DIR="$DOCS_SOURCE_DIR" OUTPUT_DIR="$OUTPUT_DIR" node ./scripts/convert-markdown.js
+            
+            # Remove the markdown source files after conversion
+            find "$OUTPUT_DIR/docs/specs" -name "*.md" -type f ! -name "README.md" -delete 2>/dev/null || true
+            find "$OUTPUT_DIR/docs/implementation" -name "*.md" -type f ! -name "README.md" -delete 2>/dev/null || true
+            find "$OUTPUT_DIR/docs/user" -name "*.md" -type f ! -name "README.md" -delete 2>/dev/null || true
+            
+            echo "Markdown conversion completed!"
+        else
+            echo "Warning: Conversion script not found. Markdown files will be served as-is."
+        fi
+    else
+        echo "Warning: Node.js not found. Markdown files will be served as-is."
+    fi
 else
     echo "Warning: Documentation source directory not found at $DOCS_SOURCE_DIR"
 fi
