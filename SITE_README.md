@@ -13,7 +13,16 @@ site/
 ├── js/               # JavaScript files (if needed)
 └── docs/
     └── index.html     # Documentation page
+
+docs/                  # Source documentation (copied during build)
+├── README.md          # Main docs index
+├── specs/            # Technical specifications
+├── implementation/   # Implementation docs
+├── user/            # User guides
+└── images/          # Shared images
 ```
+
+During the build process, the organized documentation from `docs/` is automatically copied to `public/docs/`, making it available on the static site.
 
 ## Local Development
 
@@ -52,6 +61,7 @@ Run the build script to prepare the site for deployment:
 
 This will:
 - Copy all files from `site/` to `public/`
+- Copy organized documentation from `docs/` to `public/docs/`
 - Create `_headers` file with security headers
 - Create `_redirects` file for routing
 - Optimize for Cloudflare Pages deployment
@@ -112,12 +122,13 @@ This will:
 
 You can customize the build by setting environment variables:
 
-- `BUILD_DIR`: Source directory (default: `./site`)
+- `BUILD_DIR`: Source directory for site files (default: `./site`)
 - `OUTPUT_DIR`: Output directory (default: `./public`)
+- `DOCS_SOURCE_DIR`: Source directory for documentation (default: `./docs`)
 
 Example:
 ```bash
-BUILD_DIR=./site OUTPUT_DIR=./dist ./build-site.sh
+BUILD_DIR=./site OUTPUT_DIR=./dist DOCS_SOURCE_DIR=./docs ./build-site.sh
 ```
 
 ### Custom Headers
@@ -133,8 +144,25 @@ The build script creates a `_headers` file with security headers:
 
 The `_redirects` file handles:
 - `/docs` → `/docs/index.html`
+- Direct access to organized documentation in `/docs/specs/`, `/docs/implementation/`, `/docs/user/`
 
 Cloudflare Pages automatically serves the `404.html` file for unmatched routes.
+
+## Documentation Integration
+
+The build process automatically includes organized documentation from the `docs/` directory:
+
+- **Technical Specifications** (`docs/specs/`) - Architectural design documents
+- **Implementation Documentation** (`docs/implementation/`) - Developer and testing docs
+- **User Documentation** (`docs/user/`) - End-user guides
+- **Images** (`docs/images/`) - Shared documentation assets
+
+These are copied to `public/docs/` during the build and become accessible at:
+- `https://your-site.com/docs/specs/`
+- `https://your-site.com/docs/implementation/`
+- `https://your-site.com/docs/user/`
+
+This allows the documentation to be versioned with the code and automatically deployed with the site.
 
 ## Customization
 
