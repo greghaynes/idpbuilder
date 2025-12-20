@@ -9,12 +9,25 @@ const fs = require('fs');
 const path = require('path');
 const { marked } = require('marked');
 
+// Custom renderer for mermaid diagrams
+const renderer = new marked.Renderer();
+const originalCodeRenderer = renderer.code.bind(renderer);
+
+renderer.code = function(code, language) {
+  if (language === 'mermaid') {
+    // Return mermaid code block with the class that mermaid.js will process
+    return `<pre class="mermaid">${code}</pre>`;
+  }
+  return originalCodeRenderer(code, language);
+};
+
 // Configure marked for GitHub-flavored markdown
 marked.setOptions({
   gfm: true,
   breaks: false,
   headerIds: true,
-  mangle: false
+  mangle: false,
+  renderer: renderer
 });
 
 // HTML template for documentation pages
@@ -29,6 +42,14 @@ const createHtmlPage = (title, content, category, relativePath = '') => {
     <meta name="description" content="${title} - IDP Builder Documentation">
     <title>${title} | IDP Builder</title>
     <link rel="stylesheet" href="${relativePath}../../css/style.css">
+    <script type="module">
+        import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+        mermaid.initialize({ 
+            startOnLoad: true,
+            theme: 'default',
+            securityLevel: 'loose'
+        });
+    </script>
     <style>
         .docs-container {
             max-width: 900px;
@@ -121,6 +142,18 @@ const createHtmlPage = (title, content, category, relativePath = '') => {
         }
         .markdown-content li {
             margin: 0.5rem 0;
+        }
+        /* Mermaid diagram styling */
+        .markdown-content .mermaid {
+            background-color: transparent;
+            padding: 1rem;
+            margin: 1.5rem 0;
+            text-align: center;
+            overflow-x: auto;
+        }
+        .markdown-content pre.mermaid {
+            background-color: var(--bg-alt);
+            border-radius: 5px;
         }
     </style>
 </head>
