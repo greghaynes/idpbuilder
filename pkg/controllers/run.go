@@ -5,6 +5,8 @@ import (
 
 	"github.com/cnoe-io/idpbuilder/api/v1alpha1"
 	"github.com/cnoe-io/idpbuilder/pkg/controllers/custompackage"
+	"github.com/cnoe-io/idpbuilder/pkg/controllers/gatewayprovider"
+	"github.com/cnoe-io/idpbuilder/pkg/controllers/gitopsprovider"
 	"github.com/cnoe-io/idpbuilder/pkg/controllers/gitprovider"
 	"github.com/cnoe-io/idpbuilder/pkg/controllers/platform"
 	"github.com/cnoe-io/idpbuilder/pkg/util"
@@ -82,6 +84,26 @@ func RunControllers(
 		Config: cfg,
 	}).SetupWithManager(mgr); err != nil {
 		logger.Error(err, "unable to create GiteaProvider controller")
+		return err
+	}
+
+	// Run NginxGateway controller
+	if err := (&gatewayprovider.NginxGatewayReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+		Config: cfg,
+	}).SetupWithManager(mgr); err != nil {
+		logger.Error(err, "unable to create NginxGateway controller")
+		return err
+	}
+
+	// Run ArgoCDProvider controller
+	if err := (&gitopsprovider.ArgoCDProviderReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+		Config: cfg,
+	}).SetupWithManager(mgr); err != nil {
+		logger.Error(err, "unable to create ArgoCDProvider controller")
 		return err
 	}
 

@@ -21,4 +21,6 @@ var (
 func init() {
 	SchemeBuilder.Register(&Platform{}, &PlatformList{})
 	SchemeBuilder.Register(&GiteaProvider{}, &GiteaProviderList{})
+	SchemeBuilder.Register(&ArgoCDProvider{}, &ArgoCDProviderList{})
+	SchemeBuilder.Register(&NginxGateway{}, &NginxGatewayList{})
 }
