@@ -1,0 +1,1783 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Hyperscaler Provider Implementation Specification - IDP Builder Documentation">
+    <title>Hyperscaler Provider Implementation Specification | IDP Builder</title>
+    <link rel="stylesheet" href="../../css/style.css">
+    <script type="module">
+        import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+        mermaid.initialize({ 
+            startOnLoad: true,
+            theme: 'default',
+            securityLevel: 'loose'
+        });
+    </script>
+    <style>
+        .docs-container {
+            max-width: 900px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+        }
+        .breadcrumb {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            margin-bottom: 1rem;
+        }
+        .breadcrumb a {
+            color: var(--primary-color);
+            text-decoration: none;
+        }
+        .breadcrumb a:hover {
+            text-decoration: underline;
+        }
+        .markdown-content {
+            line-height: 1.6;
+        }
+        .markdown-content h1 {
+            border-bottom: 2px solid var(--border-color);
+            padding-bottom: 0.5rem;
+            margin-bottom: 1.5rem;
+        }
+        .markdown-content h2 {
+            margin-top: 2rem;
+            margin-bottom: 1rem;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 0.3rem;
+        }
+        .markdown-content h3 {
+            margin-top: 1.5rem;
+            margin-bottom: 0.75rem;
+        }
+        .markdown-content pre {
+            background-color: var(--bg-alt);
+            padding: 1rem;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        .markdown-content code {
+            background-color: var(--bg-alt);
+            padding: 0.2rem 0.4rem;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+        }
+        .markdown-content pre code {
+            background-color: transparent;
+            padding: 0;
+        }
+        .markdown-content blockquote {
+            border-left: 4px solid var(--primary-color);
+            padding-left: 1rem;
+            margin-left: 0;
+            color: var(--text-muted);
+        }
+        .markdown-content table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 1rem 0;
+        }
+        .markdown-content th,
+        .markdown-content td {
+            border: 1px solid var(--border-color);
+            padding: 0.5rem;
+            text-align: left;
+        }
+        .markdown-content th {
+            background-color: var(--bg-alt);
+            font-weight: bold;
+        }
+        .markdown-content a {
+            color: var(--primary-color);
+            text-decoration: none;
+        }
+        .markdown-content a:hover {
+            text-decoration: underline;
+        }
+        .markdown-content img {
+            max-width: 100%;
+            height: auto;
+        }
+        .markdown-content ul,
+        .markdown-content ol {
+            padding-left: 2rem;
+            margin: 1rem 0;
+        }
+        .markdown-content li {
+            margin: 0.5rem 0;
+        }
+        /* Mermaid diagram styling */
+        .markdown-content .mermaid {
+            background-color: transparent;
+            padding: 1rem;
+            margin: 1.5rem 0;
+            text-align: center;
+            overflow-x: auto;
+        }
+        .markdown-content pre.mermaid {
+            background-color: var(--bg-alt);
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <nav class="container">
+            <div class="logo">
+                <h1>IDP Builder</h1>
+            </div>
+            <button class="menu-toggle" aria-label="Toggle menu" onclick="toggleMenu()">
+                ☰
+            </button>
+            <ul class="nav-links" id="navLinks">
+                <li><a href="../../index.html">Home</a></li>
+                <li><a href="../index.html">Docs</a></li>
+                <li><a href="https://github.com/cnoe-io/idpbuilder" target="_blank" rel="noopener">GitHub</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <main class="container">
+        <div class="docs-container">
+            <div class="breadcrumb">
+                <a href="../../index.html">Home</a> / 
+                <a href="../index.html">Docs</a> / <a href="../index.html">Technical Specifications</a>
+            </div>
+            <article class="markdown-content">
+                <h1>Hyperscaler Provider Implementation Specification</h1>
+<p><strong>Version:</strong> 1.0 Draft<br><strong>Date:</strong> December 20, 2025<br><strong>Status:</strong> Proposal<br><strong>Authors:</strong> IDP Builder Team<br><strong>Builds On:</strong> <a href="./controller-architecture-spec.md">Controller-Based Architecture Specification</a></p>
+<h2>Executive Summary</h2>
+<p>This specification extends the <a href="./controller-architecture-spec.md">Controller-Based Architecture Specification</a> by defining how major cloud hyperscalers (AWS, Azure, GCP) can implement native providers for the core duck-typed interfaces: Git Provider, Gateway Provider, and GitOps Provider. By leveraging native cloud infrastructure services, these implementations enable idpbuilder to run seamlessly in managed Kubernetes environments while utilizing each cloud provider&#39;s native capabilities.</p>
+<p><strong>Key Highlights</strong>:</p>
+<ul>
+<li><strong>AWS</strong> implements all three provider types using CodeCommit, Application Load Balancer Controller, and <strong>EKS Capabilities</strong> (a unique GitOps solution)</li>
+<li><strong>Azure</strong> implements providers using Azure DevOps Repos, Application Gateway Ingress Controller, and Flux (pre-configured for Azure)</li>
+<li><strong>GCP</strong> implements providers using Cloud Source Repositories, GKE Gateway Controller, and Config Sync</li>
+<li>All implementations adhere to the duck-typed status field contracts defined in the base architecture specification</li>
+<li>Hyperscaler providers can be mixed with open-source providers (e.g., use AWS CodeCommit with ArgoCD)</li>
+</ul>
+<h2>Goals</h2>
+<ol>
+<li><strong>Cloud-Native Integration</strong>: Enable idpbuilder to leverage native cloud services when deployed on managed Kubernetes (EKS, AKS, GKE)</li>
+<li><strong>Provider Flexibility</strong>: Allow platform teams to choose hyperscaler providers based on organizational standards and existing cloud investments</li>
+<li><strong>Duck-Type Compliance</strong>: Ensure all hyperscaler providers implement the standard duck-typed interfaces for seamless interoperability</li>
+<li><strong>Unique Cloud Features</strong>: Expose unique capabilities of each cloud (e.g., AWS EKS Capabilities for GitOps)</li>
+<li><strong>Mixed Deployments</strong>: Support hybrid configurations mixing hyperscaler and open-source providers (e.g., AWS CodeCommit + ArgoCD)</li>
+<li><strong>Production Readiness</strong>: Leverage managed services for HA, security, and operational excellence</li>
+</ol>
+<h2>Use Cases</h2>
+<h3>Use Case 1: AWS-Native Platform on EKS</h3>
+<p><strong>Scenario</strong>: Enterprise running on AWS EKS wants to use AWS-native services exclusively</p>
+<p><strong>Configuration</strong>:</p>
+<ul>
+<li><strong>Git Provider</strong>: AWS CodeCommit (fully managed Git repositories)</li>
+<li><strong>Gateway Provider</strong>: AWS Load Balancer Controller (native ALB/NLB integration)</li>
+<li><strong>GitOps Provider</strong>: AWS EKS Capabilities (EKS-native GitOps solution)</li>
+</ul>
+<p><strong>Benefits</strong>:</p>
+<ul>
+<li>Single vendor support contract</li>
+<li>IAM-based authentication and authorization</li>
+<li>Native CloudWatch integration for monitoring</li>
+<li>Compliance with AWS security standards</li>
+</ul>
+<h3>Use Case 2: Azure-Native Platform on AKS</h3>
+<p><strong>Scenario</strong>: Enterprise on Azure AKS following Azure Well-Architected Framework</p>
+<p><strong>Configuration</strong>:</p>
+<ul>
+<li><strong>Git Provider</strong>: Azure DevOps Repos (Enterprise-grade Git with pipelines)</li>
+<li><strong>Gateway Provider</strong>: Azure Application Gateway Ingress Controller (WAF, SSL offloading)</li>
+<li><strong>GitOps Provider</strong>: Flux (pre-configured with Azure integrations)</li>
+</ul>
+<p><strong>Benefits</strong>:</p>
+<ul>
+<li>Integration with Azure Active Directory</li>
+<li>Azure Monitor and Application Insights</li>
+<li>Network security with Application Gateway WAF</li>
+<li>Azure Policy compliance</li>
+</ul>
+<h3>Use Case 3: GCP-Native Platform on GKE</h3>
+<p><strong>Scenario</strong>: Enterprise on GCP GKE utilizing Google Cloud services</p>
+<p><strong>Configuration</strong>:</p>
+<ul>
+<li><strong>Git Provider</strong>: Cloud Source Repositories (integrated with Cloud Build)</li>
+<li><strong>Gateway Provider</strong>: GKE Gateway Controller (native Gateway API support)</li>
+<li><strong>GitOps Provider</strong>: Config Sync (GKE native GitOps)</li>
+</ul>
+<p><strong>Benefits</strong>:</p>
+<ul>
+<li>Integration with Google Cloud IAM and Workload Identity</li>
+<li>Cloud Operations for GKE (formerly Stackdriver)</li>
+<li>Native Gateway API support</li>
+<li>Google Cloud security scanning</li>
+</ul>
+<h3>Use Case 4: Multi-Cloud Hybrid Platform</h3>
+<p><strong>Scenario</strong>: Platform team wants flexibility to support multiple clouds while maintaining consistency</p>
+<p><strong>Configuration</strong>:</p>
+<ul>
+<li><strong>Git Providers</strong>: GitHub (portable across all clouds)</li>
+<li><strong>Gateway Providers</strong>: Cloud-native (ALB on AWS, App Gateway on Azure, GKE Gateway on GCP)</li>
+<li><strong>GitOps Provider</strong>: ArgoCD (portable, with cloud-specific integrations)</li>
+</ul>
+<p><strong>Benefits</strong>:</p>
+<ul>
+<li>Consistent Git and GitOps experience across clouds</li>
+<li>Cloud-native ingress for optimal performance</li>
+<li>Flexibility to move workloads between clouds</li>
+<li>Hybrid and multi-cloud support</li>
+</ul>
+<h3>Use Case 5: AWS with Open Source GitOps</h3>
+<p><strong>Scenario</strong>: AWS shop that wants to use AWS infrastructure but prefers ArgoCD for GitOps</p>
+<p><strong>Configuration</strong>:</p>
+<ul>
+<li><strong>Git Provider</strong>: AWS CodeCommit</li>
+<li><strong>Gateway Provider</strong>: AWS Load Balancer Controller</li>
+<li><strong>GitOps Provider</strong>: ArgoCD (with AWS integrations)</li>
+</ul>
+<p><strong>Benefits</strong>:</p>
+<ul>
+<li>Best of both worlds: AWS infrastructure + popular open-source GitOps</li>
+<li>Demonstrates duck-typing flexibility</li>
+<li>Team expertise with ArgoCD preserved</li>
+</ul>
+<h2>Architecture Overview</h2>
+<h3>Hyperscaler Provider Integration</h3>
+<p>The hyperscaler providers integrate seamlessly into the existing controller-based architecture by implementing the same duck-typed status fields as their open-source counterparts:</p>
+<pre class="mermaid">graph TB
+    Platform["<b>Platform CR (Unchanged)</b><br/>Orchestrates all providers via duck-typed references"]
+    
+    Platform -->|References by name & kind| Git["<b>Git Providers</b><br/>(Duck-Typed)"]
+    Platform -->|References by name & kind| Gateway["<b>Gateway Providers</b><br/>(Duck-Typed)"]
+    Platform -->|References by name & kind| GitOps["<b>GitOps Providers</b><br/>(Duck-Typed)"]
+    
+    Git -.-> GitOpen["Open Source:<br/>• GiteaProvider<br/>• GitHubProvider<br/>• GitLabProvider"]
+    Git -.-> GitAWS["AWS:<br/>• CodeCommit Provider"]
+    Git -.-> GitAzure["Azure:<br/>• AzureRepos Provider"]
+    Git -.-> GitGCP["GCP:<br/>• CloudSource Repositories"]
+    
+    Gateway -.-> GatewayOpen["Open Source:<br/>• NginxGateway<br/>• EnvoyGateway<br/>• IstioGateway"]
+    Gateway -.-> GatewayAWS["AWS:<br/>• ALBController"]
+    Gateway -.-> GatewayAzure["Azure:<br/>• AppGateway IngressCtrl"]
+    Gateway -.-> GatewayGCP["GCP:<br/>• GKEGateway Controller"]
+    
+    GitOps -.-> GitOpsOpen["Open Source:<br/>• ArgoCDProvider<br/>• FluxProvider"]
+    GitOps -.-> GitOpsAWS["AWS Unique:<br/>• EKSCapabilities"]
+    GitOps -.-> GitOpsAzure["Azure:<br/>• FluxAzureProvider"]
+    GitOps -.-> GitOpsGCP["GCP:<br/>• ConfigSync Provider"]
+    
+    style Platform fill:#e1f5ff,stroke:#01579b
+    style Git fill:#fff9c4,stroke:#f57f17
+    style Gateway fill:#f3e5f5,stroke:#4a148c
+    style GitOps fill:#e8f5e9,stroke:#1b5e20</pre><p><strong>All providers expose standard duck-typed status fields:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Provider Type</th>
+<th>Status Fields</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>Git Providers</strong></td>
+<td>• endpoint<br/>• internalEndpoint<br/>• credentialsRef</td>
+</tr>
+<tr>
+<td><strong>Gateway Providers</strong></td>
+<td>• ingressClassName<br/>• loadBalancerEndpoint<br/>• internalEndpoint</td>
+</tr>
+<tr>
+<td><strong>GitOps Providers</strong></td>
+<td>• endpoint<br/>• internalEndpoint<br/>• credentialsRef</td>
+</tr>
+</tbody></table>
+<h3>Cloud Provider IAM Integration</h3>
+<p>Each hyperscaler provider leverages native IAM mechanisms:</p>
+<ul>
+<li><strong>AWS</strong>: Uses IAM Roles for Service Accounts (IRSA) for pod-level permissions</li>
+<li><strong>Azure</strong>: Uses Azure AD Workload Identity for managed identity assignment</li>
+<li><strong>GCP</strong>: Uses Workload Identity for Google Cloud IAM integration</li>
+</ul>
+<p>This eliminates the need for long-lived credentials in most scenarios.</p>
+<h2>AWS Provider Implementations</h2>
+<h3>AWS CodeCommit Provider (Git)</h3>
+<p>AWS CodeCommit is a fully managed source control service that hosts secure Git repositories.</p>
+<h4>CodeCommitProvider CRD</h4>
+<pre><code class="language-yaml">apiVersion: idpbuilder.cnoe.io/v1alpha1
+kind: CodeCommitProvider
+metadata:
+  name: codecommit-primary
+  namespace: idpbuilder-system
+spec:
+  # AWS Region where repositories will be created
+  region: us-east-1
+  
+  # Authentication method
+  auth:
+    # Use IAM Role for Service Accounts (IRSA) - recommended
+    type: IRSA
+    serviceAccountName: codecommit-provider-sa
+    roleArn: arn:aws:iam::123456789012:role/CodeCommitProviderRole
+    
+    # Alternative: Use IAM credentials from secret
+    # type: IAMCredentials
+    # credentialsSecretRef:
+    #   name: aws-credentials
+    #   namespace: idpbuilder-system
+  
+  # Repository naming convention
+  repositoryPrefix: idp-  # Repositories will be named: idp-&lt;name&gt;
+  
+  # Default repository configuration
+  repositoryDefaults:
+    # Repository description template
+    description: &quot;IDP Builder managed repository&quot;
+    
+    # Tags to apply to all repositories
+    tags:
+      managed-by: idpbuilder
+      environment: production
+    
+    # Triggers and notifications
+    enableCloudWatchEvents: true
+    enableSNSNotifications: false
+  
+  # Git user configuration for commits
+  gitUser:
+    name: IDP Builder
+    email: idpbuilder@example.com
+
+status:
+  conditions:
+    - type: Ready
+      status: &quot;True&quot;
+      lastTransitionTime: &quot;2025-12-20T10:00:00Z&quot;
+      reason: IAMValidated
+      message: &quot;CodeCommit provider ready with IRSA authentication&quot;
+  
+  # Duck-typed fields (REQUIRED for Git Provider interface)
+  endpoint: https://git-codecommit.us-east-1.amazonaws.com
+  internalEndpoint: https://git-codecommit.us-east-1.amazonaws.com
+  credentialsSecretRef:
+    name: codecommit-git-credentials
+    namespace: idpbuilder-system
+    key: credentials  # Contains Git credentials helper config
+  
+  # AWS-specific status
+  region: us-east-1
+  accountId: &quot;123456789012&quot;
+  authenticated: true
+  iamRole: arn:aws:iam::123456789012:role/CodeCommitProviderRole
+</code></pre>
+<h4>Key Features</h4>
+<ol>
+<li><strong>IRSA Integration</strong>: Controller uses IAM Role for Service Accounts to assume an IAM role with CodeCommit permissions</li>
+<li><strong>Repository Management</strong>: Creates and manages CodeCommit repositories via AWS SDK</li>
+<li><strong>Git Credentials</strong>: Generates Git credentials for use by GitRepository CR and other consumers</li>
+<li><strong>CloudWatch Integration</strong>: Optional integration with CloudWatch Events for repository activity monitoring</li>
+<li><strong>Tagging</strong>: Applies AWS resource tags for cost allocation and governance</li>
+</ol>
+<h3>AWS Load Balancer Controller Provider (Gateway)</h3>
+<p>The AWS Load Balancer Controller manages AWS Elastic Load Balancers for Kubernetes clusters.</p>
+<h4>AWSLoadBalancerProvider CRD</h4>
+<pre><code class="language-yaml">apiVersion: idpbuilder.cnoe.io/v1alpha1
+kind: AWSLoadBalancerProvider
+metadata:
+  name: aws-alb
+  namespace: idpbuilder-system
+spec:
+  # Deployment namespace for the controller
+  namespace: kube-system
+  
+  # Controller version
+  version: v2.8.1
+  
+  # Installation method
+  installMethod:
+    type: Helm
+    helm:
+      repository: https://aws.github.io/eks-charts
+      chart: aws-load-balancer-controller
+      version: 1.8.1
+  
+  # AWS-specific configuration
+  aws:
+    # AWS Region
+    region: us-east-1
+    
+    # VPC ID (auto-detected if not specified)
+    vpcId: vpc-0123456789abcdef0
+    
+    # EKS Cluster name
+    clusterName: my-eks-cluster
+    
+    # IAM Role for Service Account
+    serviceAccount:
+      create: true
+      name: aws-load-balancer-controller
+      annotations:
+        eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/AWSLoadBalancerControllerRole
+  
+  # Load balancer configuration
+  loadBalancer:
+    # Default type: alb (Application Load Balancer) or nlb (Network Load Balancer)
+    type: alb
+    
+    # Default scheme: internet-facing or internal
+    scheme: internet-facing
+    
+    # Target type: ip (for Fargate) or instance
+    targetType: ip
+    
+    # SSL policy
+    sslPolicy: ELBSecurityPolicy-TLS13-1-2-2021-06
+    
+    # Tags for created load balancers
+    tags:
+      managed-by: idpbuilder
+      kubernetes.io/cluster/my-eks-cluster: owned
+  
+  # IngressClass configuration
+  ingressClass:
+    name: alb
+    isDefault: true
+  
+  # WAF integration (optional)
+  waf:
+    enabled: false
+    # webACLArn: arn:aws:wafv2:us-east-1:123456789012:global/webacl/...
+
+status:
+  conditions:
+    - type: Ready
+      status: &quot;True&quot;
+      lastTransitionTime: &quot;2025-12-20T10:00:00Z&quot;
+  
+  # Duck-typed fields (REQUIRED for Gateway Provider interface)
+  ingressClassName: alb
+  loadBalancerEndpoint: my-alb-1234567890.us-east-1.elb.amazonaws.com
+  internalEndpoint: http://aws-load-balancer-webhook-service.kube-system.svc.cluster.local
+  
+  # AWS-specific status
+  installed: true
+  version: v2.8.1
+  phase: Ready
+  controllerDeployment:
+    ready: true
+    replicas: 2
+  vpcId: vpc-0123456789abcdef0
+  loadBalancers:
+    - name: my-alb-1234567890
+      arn: arn:aws:elasticloadbalancing:us-east-1:123456789012:loadbalancer/app/...
+      dnsName: my-alb-1234567890.us-east-1.elb.amazonaws.com
+      scheme: internet-facing
+</code></pre>
+<h4>Key Features</h4>
+<ol>
+<li><strong>Native ALB/NLB Support</strong>: Creates AWS Application or Network Load Balancers</li>
+<li><strong>Target Group Binding</strong>: Manages target groups and health checks</li>
+<li><strong>WAF Integration</strong>: Optional AWS WAF integration for security</li>
+<li><strong>Certificate Management</strong>: Integrates with AWS Certificate Manager (ACM)</li>
+<li><strong>Cost Optimization</strong>: Supports IP target type for Fargate cost efficiency</li>
+</ol>
+<h3>AWS EKS Capabilities Provider (GitOps) - UNIQUE TO AWS</h3>
+<p><strong>EKS Capabilities</strong> is an AWS-native GitOps solution that provides declarative cluster management for Amazon EKS. It is the only hyperscaler-unique GitOps provider in this specification.</p>
+<p><strong>Reference</strong>: <a href="https://docs.aws.amazon.com/eks/latest/userguide/capabilities.html">https://docs.aws.amazon.com/eks/latest/userguide/capabilities.html</a></p>
+<blockquote>
+<p><strong>Note</strong>: This specification documents EKS Capabilities based on the problem statement reference. If this AWS feature is not yet publicly available or is in preview, this section represents a proposed design for how an AWS-native GitOps provider could integrate with the idpbuilder architecture. Alternative AWS GitOps implementations could use:</p>
+<ul>
+<li><strong>Flux</strong> with AWS-specific integrations (CodeCommit, IRSA, CloudWatch)</li>
+<li><strong>ArgoCD</strong> with AWS-specific integrations (similar to open-source but with AWS optimizations)</li>
+<li>Future AWS-managed GitOps solutions as they become available</li>
+</ul>
+<p>Platform teams should verify the current availability of EKS Capabilities and choose an appropriate GitOps provider for their AWS deployments.</p>
+</blockquote>
+<h4>EKSCapabilitiesProvider CRD</h4>
+<pre><code class="language-yaml">apiVersion: idpbuilder.cnoe.io/v1alpha1
+kind: EKSCapabilitiesProvider
+metadata:
+  name: eks-capabilities
+  namespace: idpbuilder-system
+spec:
+  # EKS Cluster configuration
+  cluster:
+    name: my-eks-cluster
+    region: us-east-1
+  
+  # Git repository configuration for cluster capabilities
+  gitRepository:
+    # Git provider reference (can be CodeCommit, GitHub, etc.)
+    providerRef:
+      name: codecommit-primary
+      kind: CodeCommitProvider
+      namespace: idpbuilder-system
+    
+    # Repository containing cluster capabilities manifests
+    repository: cluster-capabilities
+    branch: main
+    path: capabilities/
+  
+  # Authentication
+  auth:
+    # Use IAM Role for Service Accounts
+    type: IRSA
+    serviceAccountName: eks-capabilities-sa
+    roleArn: arn:aws:iam::123456789012:role/EKSCapabilitiesRole
+  
+  # Sync configuration
+  sync:
+    # Sync interval
+    interval: 5m
+    
+    # Prune resources not in Git
+    prune: true
+    
+    # Auto-sync on Git changes
+    autoSync: true
+  
+  # Capabilities to enable
+  capabilities:
+    # EKS Add-ons management
+    - name: addons
+      enabled: true
+      config:
+        # Automatically manage add-on versions
+        autoUpdate: true
+        # Add-ons to manage
+        addons:
+          - vpc-cni
+          - kube-proxy
+          - coredns
+          - aws-ebs-csi-driver
+    
+    # IAM Roles for Service Accounts (IRSA)
+    - name: irsa
+      enabled: true
+      config:
+        # OIDC provider (auto-detected)
+        oidcProvider: auto
+    
+    # Security groups for pods
+    - name: security-group-policy
+      enabled: true
+    
+    # Pod Identity (new AWS feature)
+    - name: pod-identity
+      enabled: true
+  
+  # Notification configuration
+  notifications:
+    # SNS topic for sync events
+    snsTopicArn: arn:aws:sns:us-east-1:123456789012:eks-capabilities-notifications
+    
+    # Notify on sync failure
+    notifyOnFailure: true
+    
+    # Notify on successful sync
+    notifyOnSuccess: false
+
+status:
+  conditions:
+    - type: Ready
+      status: &quot;True&quot;
+      lastTransitionTime: &quot;2025-12-20T10:00:00Z&quot;
+      reason: SyncSuccessful
+      message: &quot;EKS Capabilities synced successfully from Git&quot;
+  
+  # Duck-typed fields (REQUIRED for GitOps Provider interface)
+  endpoint: https://console.aws.amazon.com/eks/home?region=us-east-1#/clusters/my-eks-cluster
+  internalEndpoint: https://eks.us-east-1.amazonaws.com
+  credentialsSecretRef:
+    name: eks-capabilities-credentials
+    namespace: idpbuilder-system
+    key: kubeconfig
+  
+  # AWS-specific status
+  installed: true
+  phase: Ready
+  lastSyncTime: &quot;2025-12-20T10:05:00Z&quot;
+  syncStatus: Synced
+  syncRevision: abc123def456
+  
+  # Capabilities status
+  capabilities:
+    - name: addons
+      status: Active
+      addons:
+        - name: vpc-cni
+          version: v1.16.0
+          status: Active
+        - name: kube-proxy
+          version: v1.29.0
+          status: Active
+    - name: irsa
+      status: Active
+      oidcProvider: oidc.eks.us-east-1.amazonaws.com/id/EXAMPLED539D4633E53DE1B71EXAMPLE
+    - name: security-group-policy
+      status: Active
+    - name: pod-identity
+      status: Active
+  
+  # Sync statistics
+  syncStats:
+    totalSyncs: 42
+    successfulSyncs: 41
+    failedSyncs: 1
+    lastFailure: &quot;2025-12-19T15:30:00Z&quot;
+</code></pre>
+<h4>Key Features of EKS Capabilities</h4>
+<ol>
+<li><strong>EKS-Native GitOps</strong>: Designed specifically for Amazon EKS cluster management</li>
+<li><strong>Add-on Management</strong>: Declaratively manages EKS add-ons (VPC CNI, CoreDNS, etc.)</li>
+<li><strong>IRSA Support</strong>: Automatic management of IAM Roles for Service Accounts</li>
+<li><strong>Security Group Policies</strong>: Declarative security group management for pods</li>
+<li><strong>Pod Identity</strong>: Support for AWS Pod Identity (next-generation IRSA)</li>
+<li><strong>CloudWatch Integration</strong>: Native integration with CloudWatch for monitoring sync operations</li>
+<li><strong>SNS Notifications</strong>: Configurable notifications for sync events</li>
+</ol>
+<h4>Why EKS Capabilities is Unique</h4>
+<p>Unlike ArgoCD and Flux which are Kubernetes-native GitOps tools that work on any cluster, <strong>EKS Capabilities</strong> is:</p>
+<ul>
+<li><strong>AWS-only</strong>: Only works on Amazon EKS clusters</li>
+<li><strong>Deeply Integrated</strong>: Direct integration with EKS APIs and AWS services</li>
+<li><strong>Cluster-focused</strong>: Designed for cluster-level configuration management</li>
+<li><strong>Add-on Aware</strong>: Native support for EKS add-on lifecycle management</li>
+<li><strong>IAM-centric</strong>: First-class support for AWS IAM and security features</li>
+</ul>
+<p>This makes it a natural choice for AWS-centric organizations that want deep EKS integration.</p>
+<h2>Azure Provider Implementations</h2>
+<h3>Azure DevOps Repos Provider (Git)</h3>
+<p>Azure DevOps Repos provides enterprise-grade Git repositories with integrated CI/CD pipelines.</p>
+<h4>AzureReposProvider CRD</h4>
+<pre><code class="language-yaml">apiVersion: idpbuilder.cnoe.io/v1alpha1
+kind: AzureReposProvider
+metadata:
+  name: azure-repos-primary
+  namespace: idpbuilder-system
+spec:
+  # Azure DevOps organization
+  organization: my-organization
+  
+  # Azure DevOps project
+  project: idp-platform
+  
+  # Authentication
+  auth:
+    # Use Azure AD Workload Identity (recommended)
+    type: WorkloadIdentity
+    serviceAccountName: azure-repos-provider-sa
+    tenantId: 12345678-1234-1234-1234-123456789012
+    clientId: 87654321-4321-4321-4321-210987654321
+    
+    # Alternative: Personal Access Token
+    # type: PAT
+    # credentialsSecretRef:
+    #   name: azure-devops-pat
+    #   namespace: idpbuilder-system
+    #   key: token
+  
+  # Repository defaults
+  repositoryDefaults:
+    # Enable branch policies
+    branchPolicies:
+      enabled: true
+      requireReviewers: 1
+      requireBuildValidation: false
+    
+    # Enable pull request work items
+    requireWorkItemLinks: false
+    
+    # Default branch name
+    defaultBranch: main
+  
+  # Git user configuration
+  gitUser:
+    name: IDP Builder
+    email: idpbuilder@example.com
+
+status:
+  conditions:
+    - type: Ready
+      status: &quot;True&quot;
+      lastTransitionTime: &quot;2025-12-20T10:00:00Z&quot;
+  
+  # Duck-typed fields (REQUIRED for Git Provider interface)
+  endpoint: https://dev.azure.com/my-organization/idp-platform/_git
+  internalEndpoint: https://dev.azure.com/my-organization/idp-platform/_apis/git
+  credentialsSecretRef:
+    name: azure-repos-git-credentials
+    namespace: idpbuilder-system
+    key: credentials
+  
+  # Azure-specific status
+  organization: my-organization
+  project: idp-platform
+  projectId: a1b2c3d4-e5f6-7890-abcd-ef1234567890
+  authenticated: true
+  tenantId: 12345678-1234-1234-1234-123456789012
+</code></pre>
+<h4>Key Features</h4>
+<ol>
+<li><strong>Azure AD Integration</strong>: Uses Azure AD Workload Identity for secure authentication</li>
+<li><strong>Branch Policies</strong>: Declarative branch protection and pull request policies</li>
+<li><strong>Work Item Integration</strong>: Links Git commits to Azure Boards work items</li>
+<li><strong>Pipeline Integration</strong>: Native integration with Azure Pipelines</li>
+<li><strong>Enterprise Security</strong>: Supports Azure security policies and compliance requirements</li>
+</ol>
+<h3>Azure Application Gateway Ingress Controller Provider (Gateway)</h3>
+<p>The Application Gateway Ingress Controller (AGIC) uses Azure Application Gateway for ingress traffic.</p>
+<h4>AzureAppGatewayProvider CRD</h4>
+<pre><code class="language-yaml">apiVersion: idpbuilder.cnoe.io/v1alpha1
+kind: AzureAppGatewayProvider
+metadata:
+  name: azure-appgw
+  namespace: idpbuilder-system
+spec:
+  # Deployment namespace
+  namespace: kube-system
+  
+  # Controller version
+  version: 1.7.0
+  
+  # Installation method
+  installMethod:
+    type: Helm
+    helm:
+      repository: https://appgwingress.blob.core.windows.net/ingress-azure-helm-package/
+      chart: ingress-azure
+      version: 1.7.0
+  
+  # Azure Application Gateway configuration
+  applicationGateway:
+    # Existing Application Gateway resource ID
+    resourceId: /subscriptions/12345678-1234-1234-1234-123456789012/resourceGroups/my-rg/providers/Microsoft.Network/applicationGateways/my-appgw
+    
+    # Or create new Application Gateway
+    # create: true
+    # name: idp-appgw
+    # sku:
+    #   name: WAF_v2
+    #   tier: WAF_v2
+    #   capacity: 2
+  
+  # AKS cluster configuration
+  cluster:
+    subscriptionId: 12345678-1234-1234-1234-123456789012
+    resourceGroup: my-rg
+    name: my-aks-cluster
+  
+  # Authentication
+  auth:
+    # Use Azure AD Workload Identity
+    type: WorkloadIdentity
+    serviceAccountName: agic-sa
+    tenantId: 12345678-1234-1234-1234-123456789012
+    clientId: 87654321-4321-4321-4321-210987654321
+  
+  # IngressClass configuration
+  ingressClass:
+    name: azure-application-gateway
+    isDefault: true
+  
+  # WAF configuration
+  waf:
+    enabled: true
+    mode: Prevention  # Detection or Prevention
+    ruleSetType: OWASP
+    ruleSetVersion: &quot;3.2&quot;
+
+status:
+  conditions:
+    - type: Ready
+      status: &quot;True&quot;
+      lastTransitionTime: &quot;2025-12-20T10:00:00Z&quot;
+  
+  # Duck-typed fields (REQUIRED for Gateway Provider interface)
+  ingressClassName: azure-application-gateway
+  loadBalancerEndpoint: my-appgw-12345.eastus.cloudapp.azure.com
+  internalEndpoint: http://agic-controller.kube-system.svc.cluster.local
+  
+  # Azure-specific status
+  installed: true
+  version: 1.7.0
+  phase: Ready
+  applicationGateway:
+    resourceId: /subscriptions/.../applicationGateways/my-appgw
+    publicIp: 20.30.40.50
+    fqdn: my-appgw-12345.eastus.cloudapp.azure.com
+    provisioningState: Succeeded
+  wafEnabled: true
+  wafMode: Prevention
+</code></pre>
+<h4>Key Features</h4>
+<ol>
+<li><strong>WAF Protection</strong>: Built-in Web Application Firewall for security</li>
+<li><strong>SSL Offloading</strong>: Terminates SSL at the Application Gateway</li>
+<li><strong>Azure Integration</strong>: Native integration with Azure Virtual Network, Azure Monitor</li>
+<li><strong>Autoscaling</strong>: Supports Application Gateway v2 autoscaling</li>
+<li><strong>Multi-site Hosting</strong>: Supports routing based on hostname and path</li>
+</ol>
+<h3>Flux Azure Provider (GitOps)</h3>
+<p>Flux is pre-configured with Azure-specific integrations for AKS environments.</p>
+<h4>FluxAzureProvider CRD</h4>
+<pre><code class="language-yaml">apiVersion: idpbuilder.cnoe.io/v1alpha1
+kind: FluxAzureProvider
+metadata:
+  name: flux-azure
+  namespace: idpbuilder-system
+spec:
+  # Deployment namespace
+  namespace: flux-system
+  
+  # Flux version
+  version: v2.4.0
+  
+  # Installation method
+  installMethod:
+    type: Helm
+    helm:
+      repository: https://fluxcd-community.github.io/helm-charts
+      chart: flux2
+      version: 2.14.0
+  
+  # Azure-specific configuration
+  azure:
+    # Tenant ID
+    tenantId: 12345678-1234-1234-1234-123456789012
+    
+    # Azure DevOps integration (if using Azure Repos)
+    devops:
+      enabled: true
+      organization: my-organization
+      project: idp-platform
+    
+    # Azure Key Vault integration for secrets
+    keyVault:
+      enabled: true
+      name: my-keyvault
+      tenantId: 12345678-1234-1234-1234-123456789012
+    
+    # Azure Monitor integration
+    monitor:
+      enabled: true
+      workspaceId: 12345678-90ab-cdef-1234-567890abcdef
+  
+  # Authentication
+  auth:
+    # Use Azure AD Workload Identity
+    type: WorkloadIdentity
+    serviceAccountName: flux-sa
+    clientId: 87654321-4321-4321-4321-210987654321
+  
+  # Flux components configuration
+  components:
+    sourceController:
+      enabled: true
+    kustomizeController:
+      enabled: true
+    helmController:
+      enabled: true
+    notificationController:
+      enabled: true
+    imageReflectionController:
+      enabled: false
+    imageAutomationController:
+      enabled: false
+
+status:
+  conditions:
+    - type: Ready
+      status: &quot;True&quot;
+      lastTransitionTime: &quot;2025-12-20T10:00:00Z&quot;
+  
+  # Duck-typed fields (REQUIRED for GitOps Provider interface)
+  endpoint: https://portal.azure.com/#view/HubsExtension/BrowseResource/resourceType/Microsoft.ContainerService%2FmanagedClusters
+  internalEndpoint: http://source-controller.flux-system.svc.cluster.local
+  credentialsSecretRef:
+    name: flux-azure-credentials
+    namespace: flux-system
+    key: token
+  
+  # Azure-specific status
+  installed: true
+  version: v2.4.0
+  phase: Ready
+  azure:
+    keyVaultIntegration: Active
+    monitorIntegration: Active
+  controllers:
+    sourceController:
+      ready: true
+    kustomizeController:
+      ready: true
+    helmController:
+      ready: true
+    notificationController:
+      ready: true
+</code></pre>
+<h4>Key Features</h4>
+<ol>
+<li><strong>Azure DevOps Integration</strong>: Native support for Azure Repos</li>
+<li><strong>Key Vault Integration</strong>: Secure secrets management with Azure Key Vault</li>
+<li><strong>Azure Monitor</strong>: Native integration for logging and monitoring</li>
+<li><strong>Workload Identity</strong>: Uses Azure AD Workload Identity for secure authentication</li>
+<li><strong>Azure Policy</strong>: Compatible with Azure Policy for Kubernetes</li>
+</ol>
+<h2>GCP Provider Implementations</h2>
+<h3>Cloud Source Repositories Provider (Git)</h3>
+<p>Google Cloud Source Repositories provides fully managed, private Git repositories.</p>
+<h4>CloudSourceRepositoriesProvider CRD</h4>
+<pre><code class="language-yaml">apiVersion: idpbuilder.cnoe.io/v1alpha1
+kind: CloudSourceRepositoriesProvider
+metadata:
+  name: cloud-source-repos
+  namespace: idpbuilder-system
+spec:
+  # GCP Project ID
+  projectId: my-gcp-project
+  
+  # GCP Region (optional, repositories are global)
+  region: us-central1
+  
+  # Authentication
+  auth:
+    # Use Workload Identity (recommended)
+    type: WorkloadIdentity
+    serviceAccountName: cloud-source-repos-sa
+    gcpServiceAccount: cloud-source-repos@my-gcp-project.iam.gserviceaccount.com
+    
+    # Alternative: Service Account Key
+    # type: ServiceAccountKey
+    # credentialsSecretRef:
+    #   name: gcp-credentials
+    #   namespace: idpbuilder-system
+    #   key: key.json
+  
+  # Repository naming convention
+  repositoryPrefix: idp-
+  
+  # Cloud Build integration
+  cloudBuild:
+    enabled: true
+    # Automatically create build triggers for new repositories
+    autoCreateTriggers: false
+  
+  # Pub/Sub notifications
+  pubsub:
+    enabled: true
+    topic: cloud-source-repos-notifications
+  
+  # Git user configuration
+  gitUser:
+    name: IDP Builder
+    email: idpbuilder@my-gcp-project.iam.gserviceaccount.com
+
+status:
+  conditions:
+    - type: Ready
+      status: &quot;True&quot;
+      lastTransitionTime: &quot;2025-12-20T10:00:00Z&quot;
+  
+  # Duck-typed fields (REQUIRED for Git Provider interface)
+  endpoint: https://source.developers.google.com/p/my-gcp-project
+  internalEndpoint: https://source.developers.google.com/p/my-gcp-project
+  credentialsSecretRef:
+    name: cloud-source-repos-credentials
+    namespace: idpbuilder-system
+    key: credentials
+  
+  # GCP-specific status
+  projectId: my-gcp-project
+  projectNumber: &quot;123456789012&quot;
+  authenticated: true
+  serviceAccount: cloud-source-repos@my-gcp-project.iam.gserviceaccount.com
+  cloudBuildIntegration: Active
+</code></pre>
+<h4>Key Features</h4>
+<ol>
+<li><strong>Workload Identity Integration</strong>: Uses GCP Workload Identity for secure authentication</li>
+<li><strong>Cloud Build Integration</strong>: Native integration with Cloud Build for CI/CD</li>
+<li><strong>Pub/Sub Notifications</strong>: Repository event notifications via Cloud Pub/Sub</li>
+<li><strong>IAM Integration</strong>: Fine-grained access control with Cloud IAM</li>
+<li><strong>Audit Logging</strong>: Full audit trail with Cloud Audit Logs</li>
+</ol>
+<h3>GKE Gateway Controller Provider (Gateway)</h3>
+<p>GKE Gateway Controller provides native support for the Gateway API on GKE.</p>
+<h4>GKEGatewayProvider CRD</h4>
+<pre><code class="language-yaml">apiVersion: idpbuilder.cnoe.io/v1alpha1
+kind: GKEGatewayProvider
+metadata:
+  name: gke-gateway
+  namespace: idpbuilder-system
+spec:
+  # GKE cluster configuration
+  cluster:
+    projectId: my-gcp-project
+    location: us-central1
+    name: my-gke-cluster
+  
+  # Gateway API version
+  gatewayApiVersion: v1
+  
+  # Gateway class configuration
+  gatewayClass:
+    name: gke-l7-global-external-managed
+    # Options:
+    # - gke-l7-global-external-managed (Global external HTTPS)
+    # - gke-l7-regional-external-managed (Regional external HTTPS)
+    # - gke-l7-rilb (Regional internal HTTPS)
+    # - gke-l7-gxlb (Global external HTTPS with advanced features)
+  
+  # Gateway configuration
+  gateway:
+    # Gateway name
+    name: idp-gateway
+    
+    # Listeners
+    listeners:
+      - name: http
+        protocol: HTTP
+        port: 80
+      - name: https
+        protocol: HTTPS
+        port: 443
+        tls:
+          mode: Terminate
+          certificateRefs:
+            - name: platform-tls
+              namespace: idpbuilder-system
+  
+  # SSL configuration
+  ssl:
+    # Use Google-managed certificates
+    managedCertificates:
+      enabled: true
+      domains:
+        - &quot;*.idp.example.com&quot;
+    
+    # Or use Certificate Manager
+    # certificateManager:
+    #   enabled: true
+    #   certificateMapId: projects/my-gcp-project/locations/global/certificateMaps/my-cert-map
+  
+  # Cloud Armor integration (DDoS protection and WAF)
+  cloudArmor:
+    enabled: true
+    securityPolicyName: idp-security-policy
+
+status:
+  conditions:
+    - type: Ready
+      status: &quot;True&quot;
+      lastTransitionTime: &quot;2025-12-20T10:00:00Z&quot;
+  
+  # Duck-typed fields (REQUIRED for Gateway Provider interface)
+  ingressClassName: gke-l7-global-external-managed
+  loadBalancerEndpoint: 34.120.50.60
+  internalEndpoint: http://gke-gateway.default.svc.cluster.local
+  
+  # GCP-specific status
+  installed: true
+  phase: Ready
+  gateway:
+    name: idp-gateway
+    namespace: default
+    ready: true
+    addresses:
+      - type: IPAddress
+        value: 34.120.50.60
+  gatewayClass: gke-l7-global-external-managed
+  sslCertificates:
+    - managed: true
+      domains:
+        - &quot;*.idp.example.com&quot;
+      status: Active
+  cloudArmorPolicy: idp-security-policy
+</code></pre>
+<h4>Key Features</h4>
+<ol>
+<li><strong>Native Gateway API</strong>: First-class support for Kubernetes Gateway API</li>
+<li><strong>Global Load Balancing</strong>: Multi-region load balancing with Cloud Load Balancing</li>
+<li><strong>Google-Managed Certificates</strong>: Automatic SSL certificate provisioning and renewal</li>
+<li><strong>Cloud Armor</strong>: DDoS protection and Web Application Firewall</li>
+<li><strong>Cloud CDN</strong>: Optional CDN integration for static content</li>
+<li><strong>IAP Integration</strong>: Integration with Identity-Aware Proxy for authentication</li>
+</ol>
+<h3>Config Sync Provider (GitOps)</h3>
+<p>Config Sync is GKE&#39;s native GitOps solution, part of Anthos Config Management.</p>
+<h4>ConfigSyncProvider CRD</h4>
+<pre><code class="language-yaml">apiVersion: idpbuilder.cnoe.io/v1alpha1
+kind: ConfigSyncProvider
+metadata:
+  name: config-sync
+  namespace: idpbuilder-system
+spec:
+  # GKE cluster configuration
+  cluster:
+    projectId: my-gcp-project
+    location: us-central1
+    name: my-gke-cluster
+  
+  # Config Sync version (managed by GKE)
+  version: &quot;1.17.0&quot;
+  
+  # Git repository configuration
+  git:
+    # Git provider reference
+    providerRef:
+      name: cloud-source-repos
+      kind: CloudSourceRepositoriesProvider
+      namespace: idpbuilder-system
+    
+    # Repository details
+    repo: https://source.developers.google.com/p/my-gcp-project/r/cluster-config
+    branch: main
+    revision: HEAD
+    
+    # Directory structure
+    syncDir: config-sync-root
+    policyDir: policies
+    
+    # Authentication
+    auth: gcpserviceaccount
+    gcpServiceAccountEmail: config-sync@my-gcp-project.iam.gserviceaccount.com
+  
+  # Sync configuration
+  sync:
+    # Sync wait time
+    syncWait: 15s
+    
+    # Source format
+    sourceFormat: unstructured  # or &#39;hierarchy&#39;
+    
+    # Prevent drift
+    preventDrift: true
+  
+  # Policy Controller (OPA Gatekeeper integration)
+  policyController:
+    enabled: true
+    # Audit interval
+    auditIntervalSeconds: 60
+    # Template library
+    templateLibrary:
+      installation: all  # or &#39;none&#39;, &#39;custom&#39;
+  
+  # Monitoring
+  monitoring:
+    enabled: true
+
+status:
+  conditions:
+    - type: Ready
+      status: &quot;True&quot;
+      lastTransitionTime: &quot;2025-12-20T10:00:00Z&quot;
+      reason: Synced
+      message: &quot;Config Sync is healthy and synced&quot;
+  
+  # Duck-typed fields (REQUIRED for GitOps Provider interface)
+  endpoint: https://console.cloud.google.com/kubernetes/config_management
+  internalEndpoint: https://gkeconnect.googleapis.com/v1/projects/my-gcp-project/locations/us-central1/gkeClusters/my-gke-cluster
+  credentialsSecretRef:
+    name: config-sync-credentials
+    namespace: config-management-system
+    key: token
+  
+  # GCP-specific status
+  installed: true
+  version: &quot;1.17.0&quot;
+  phase: Synced
+  
+  sync:
+    status: Synced
+    commit: abc123def456
+    lastSyncTime: &quot;2025-12-20T10:05:00Z&quot;
+    errors: 0
+  
+  policyController:
+    status: Active
+    violations: 0
+  
+  # Resource stats
+  resourceStats:
+    totalResources: 156
+    syncedResources: 156
+    failedResources: 0
+</code></pre>
+<h4>Key Features</h4>
+<ol>
+<li><strong>GKE Native</strong>: Deeply integrated with GKE and Anthos</li>
+<li><strong>Policy Controller</strong>: Built-in OPA Gatekeeper for policy enforcement</li>
+<li><strong>Hierarchical Repos</strong>: Support for hierarchical configuration structure</li>
+<li><strong>Multi-Cluster</strong>: Supports syncing configuration across multiple GKE clusters</li>
+<li><strong>Cloud Monitoring</strong>: Native integration with Cloud Operations (formerly Stackdriver)</li>
+<li><strong>Drift Prevention</strong>: Prevents and alerts on configuration drift</li>
+</ol>
+<h2>Interface Definitions (CRDs)</h2>
+<h3>Common Duck-Typed Status Fields</h3>
+<p>All provider CRDs MUST implement these duck-typed status fields to ensure interoperability:</p>
+<h4>Git Provider Interface</h4>
+<pre><code class="language-go">// All Git providers (open-source and hyperscaler) MUST expose these fields
+type GitProviderStatus struct {
+    // Standard Kubernetes conditions
+    Conditions []metav1.Condition `json:&quot;conditions,omitempty&quot;`
+    
+    // REQUIRED: External URL for web UI and Git operations
+    Endpoint string `json:&quot;endpoint,omitempty&quot;`
+    
+    // REQUIRED: Cluster-internal URL for API access
+    InternalEndpoint string `json:&quot;internalEndpoint,omitempty&quot;`
+    
+    // REQUIRED: Reference to secret containing Git credentials
+    CredentialsSecretRef *SecretReference `json:&quot;credentialsSecretRef,omitempty&quot;`
+}
+</code></pre>
+<p><strong>Implementations</strong>:</p>
+<ul>
+<li>Open Source: <code>GiteaProvider</code>, <code>GitHubProvider</code>, <code>GitLabProvider</code></li>
+<li>AWS: <code>CodeCommitProvider</code></li>
+<li>Azure: <code>AzureReposProvider</code></li>
+<li>GCP: <code>CloudSourceRepositoriesProvider</code></li>
+</ul>
+<h4>Gateway Provider Interface</h4>
+<pre><code class="language-go">// All Gateway providers (open-source and hyperscaler) MUST expose these fields
+type GatewayProviderStatus struct {
+    // Standard Kubernetes conditions
+    Conditions []metav1.Condition `json:&quot;conditions,omitempty&quot;`
+    
+    // REQUIRED: Ingress class name for Ingress resources
+    IngressClassName string `json:&quot;ingressClassName,omitempty&quot;`
+    
+    // REQUIRED: External endpoint for accessing services
+    LoadBalancerEndpoint string `json:&quot;loadBalancerEndpoint,omitempty&quot;`
+    
+    // REQUIRED: Cluster-internal API endpoint
+    InternalEndpoint string `json:&quot;internalEndpoint,omitempty&quot;`
+}
+</code></pre>
+<p><strong>Implementations</strong>:</p>
+<ul>
+<li>Open Source: <code>NginxGateway</code>, <code>EnvoyGateway</code>, <code>IstioGateway</code></li>
+<li>AWS: <code>AWSLoadBalancerProvider</code></li>
+<li>Azure: <code>AzureAppGatewayProvider</code></li>
+<li>GCP: <code>GKEGatewayProvider</code></li>
+</ul>
+<h4>GitOps Provider Interface</h4>
+<pre><code class="language-go">// All GitOps providers (open-source and hyperscaler) MUST expose these fields
+type GitOpsProviderStatus struct {
+    // Standard Kubernetes conditions
+    Conditions []metav1.Condition `json:&quot;conditions,omitempty&quot;`
+    
+    // REQUIRED: External URL for web UI
+    Endpoint string `json:&quot;endpoint,omitempty&quot;`
+    
+    // REQUIRED: Cluster-internal API endpoint
+    InternalEndpoint string `json:&quot;internalEndpoint,omitempty&quot;`
+    
+    // REQUIRED: Reference to secret containing admin credentials
+    CredentialsSecretRef *SecretReference `json:&quot;credentialsSecretRef,omitempty&quot;`
+}
+</code></pre>
+<p><strong>Implementations</strong>:</p>
+<ul>
+<li>Open Source: <code>ArgoCDProvider</code>, <code>FluxProvider</code></li>
+<li>AWS: <code>EKSCapabilitiesProvider</code> (UNIQUE)</li>
+<li>Azure: <code>FluxAzureProvider</code></li>
+<li>GCP: <code>ConfigSyncProvider</code></li>
+</ul>
+<h3>Platform CR Integration</h3>
+<p>The Platform CR remains unchanged and can reference any provider implementation:</p>
+<pre><code class="language-yaml">apiVersion: idpbuilder.cnoe.io/v1alpha1
+kind: Platform
+metadata:
+  name: aws-production
+  namespace: idpbuilder-system
+spec:
+  domain: idp.example.com
+  
+  components:
+    gitProviders:
+      # Reference AWS CodeCommit provider
+      - name: codecommit-primary
+        kind: CodeCommitProvider
+        namespace: idpbuilder-system
+    
+    gateways:
+      # Reference AWS Load Balancer Controller
+      - name: aws-alb
+        kind: AWSLoadBalancerProvider
+        namespace: idpbuilder-system
+    
+    gitOpsProviders:
+      # Reference AWS EKS Capabilities (unique to AWS)
+      - name: eks-capabilities
+        kind: EKSCapabilitiesProvider
+        namespace: idpbuilder-system
+</code></pre>
+<h2>Implementation Concerns</h2>
+<p><em>Note: This section will be completed in a follow-up phase as per the problem statement. It will cover:</em></p>
+<ul>
+<li>Controller implementation patterns for each hyperscaler provider</li>
+<li>SDK integration requirements (AWS SDK, Azure SDK, GCP SDK)</li>
+<li>IAM/authentication setup procedures</li>
+<li>Testing strategies for hyperscaler integrations</li>
+<li>Cost considerations and optimization</li>
+<li>Security best practices</li>
+<li>Migration paths from open-source to hyperscaler providers</li>
+<li>Troubleshooting and operational runbooks</li>
+</ul>
+<h2>Success Criteria</h2>
+<h3>Functional Criteria</h3>
+<ul>
+<li><input disabled="" type="checkbox"> All hyperscaler providers implement duck-typed status fields correctly</li>
+<li><input disabled="" type="checkbox"> Platform CR successfully orchestrates hyperscaler providers</li>
+<li><input disabled="" type="checkbox"> Mixed provider scenarios (e.g., AWS Git + ArgoCD) work seamlessly</li>
+<li><input disabled="" type="checkbox"> GitRepository CR works with all Git providers (open-source and hyperscaler)</li>
+<li><input disabled="" type="checkbox"> Package CR works with all GitOps providers (open-source and hyperscaler)</li>
+<li><input disabled="" type="checkbox"> EKS Capabilities provider successfully manages EKS add-ons and configurations</li>
+</ul>
+<h3>Quality Criteria</h3>
+<ul>
+<li><input disabled="" type="checkbox"> CRD schemas validated and documented</li>
+<li><input disabled="" type="checkbox"> Duck-typing verified through integration tests</li>
+<li><input disabled="" type="checkbox"> Provider substitution tested (swap providers without breaking Platform)</li>
+<li><input disabled="" type="checkbox"> Documentation complete for all provider types</li>
+<li><input disabled="" type="checkbox"> Examples provided for each hyperscaler</li>
+</ul>
+<h3>Adoption Criteria</h3>
+<ul>
+<li><input disabled="" type="checkbox"> At least one reference implementation per hyperscaler</li>
+<li><input disabled="" type="checkbox"> Community validation of CRD schemas</li>
+<li><input disabled="" type="checkbox"> Clear migration path from open-source providers to hyperscaler providers</li>
+<li><input disabled="" type="checkbox"> Cost analysis provided for hyperscaler provider usage</li>
+</ul>
+<h2>Conclusion</h2>
+<p>This specification extends the controller-based architecture to support native cloud provider integrations. By implementing the duck-typed status field interfaces, hyperscaler providers enable seamless substitution and mixing of providers while leveraging the unique capabilities of each cloud platform.</p>
+<p><strong>Key Takeaways</strong>:</p>
+<ol>
+<li><strong>AWS EKS Capabilities</strong> is documented as a hyperscaler-unique GitOps provider concept for deep EKS integration (subject to AWS feature availability - see note in AWS section)</li>
+<li>All hyperscaler providers adhere to duck-typed interfaces for interoperability</li>
+<li>Mixed provider scenarios are fully supported (e.g., AWS CodeCommit + ArgoCD)</li>
+<li>Each cloud provider&#39;s native IAM and security features are leveraged</li>
+<li>Migration paths exist from open-source to hyperscaler providers</li>
+</ol>
+<p><strong>Next Steps</strong>:</p>
+<ol>
+<li>Validate AWS EKS Capabilities availability and update specification accordingly</li>
+<li>Community review and feedback on CRD schemas</li>
+<li>Reference implementation for AWS providers (starting with CodeCommit)</li>
+<li>Reference implementation for Azure providers</li>
+<li>Reference implementation for GCP providers</li>
+<li>Implementation concerns documentation (Phase 2)</li>
+<li>Integration testing across provider combinations</li>
+<li>Cost optimization guidance and best practices</li>
+</ol>
+<hr>
+<p><strong>Document Status</strong>: Draft for community review</p>
+<p><strong>Important</strong>: The AWS EKS Capabilities section represents a proposed design based on the problem statement. Platform teams should verify feature availability before implementation.</p>
+<p><strong>Feedback</strong>: Please provide feedback via GitHub issues or discussions in the idpbuilder repository.</p>
+<h2>Appendix</h2>
+<h3>A. Provider Comparison Matrix</h3>
+<table>
+<thead>
+<tr>
+<th>Feature</th>
+<th>Open Source Providers</th>
+<th>AWS Providers</th>
+<th>Azure Providers</th>
+<th>GCP Providers</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>Git</strong></td>
+<td>Gitea, GitHub, GitLab</td>
+<td>CodeCommit</td>
+<td>Azure Repos</td>
+<td>Cloud Source Repos</td>
+</tr>
+<tr>
+<td><strong>Cost</strong></td>
+<td>Free (self-hosted) or variable</td>
+<td>$1/active user/month</td>
+<td>Included in Azure DevOps</td>
+<td>$1/active user/month</td>
+</tr>
+<tr>
+<td><strong>HA</strong></td>
+<td>Manual setup</td>
+<td>Managed</td>
+<td>Managed</td>
+<td>Managed</td>
+</tr>
+<tr>
+<td><strong>Auth</strong></td>
+<td>Various</td>
+<td>IAM/IRSA</td>
+<td>Azure AD/Workload Identity</td>
+<td>Cloud IAM/Workload Identity</td>
+</tr>
+<tr>
+<td><strong>Integration</strong></td>
+<td>Generic</td>
+<td>Deep AWS</td>
+<td>Deep Azure</td>
+<td>Deep GCP</td>
+</tr>
+<tr>
+<td><strong>Gateway</strong></td>
+<td>Nginx, Envoy, Istio</td>
+<td>ALB Controller</td>
+<td>App Gateway</td>
+<td>GKE Gateway</td>
+</tr>
+<tr>
+<td><strong>WAF</strong></td>
+<td>Add-on</td>
+<td>AWS WAF</td>
+<td>Included</td>
+<td>Cloud Armor</td>
+</tr>
+<tr>
+<td><strong>SSL</strong></td>
+<td>Cert-Manager</td>
+<td>ACM</td>
+<td>App Gateway + Key Vault</td>
+<td>Google-Managed Certs</td>
+</tr>
+<tr>
+<td><strong>GitOps</strong></td>
+<td>ArgoCD, Flux</td>
+<td><strong>EKS Capabilities</strong> (unique)</td>
+<td>Flux + Azure</td>
+<td>Config Sync</td>
+</tr>
+<tr>
+<td><strong>Multi-Cluster</strong></td>
+<td>Native support</td>
+<td>Multi-cluster capable</td>
+<td>Fleet Manager</td>
+<td>Anthos</td>
+</tr>
+</tbody></table>
+<h3>B. Cost Considerations</h3>
+<h4>AWS CodeCommit Pricing</h4>
+<ul>
+<li>$1/active user/month (first 5 users free)</li>
+<li>Storage: $0.06/GB-month (first 50 GB free)</li>
+<li>Git requests: Free (within limits)</li>
+</ul>
+<h4>Azure DevOps Repos Pricing</h4>
+<ul>
+<li>Included in Azure DevOps Basic Plan ($6/user/month for first 5 users)</li>
+<li>Unlimited private repos</li>
+<li>Free for open source projects (up to 5 users)</li>
+</ul>
+<h4>GCP Cloud Source Repositories Pricing</h4>
+<ul>
+<li>$1/active user/month (up to 5 users)</li>
+<li>$1/project/month (over 5 users)</li>
+<li>Storage: $0.10/GB-month (first 50 GB free)</li>
+</ul>
+<h4>Gateway/Load Balancer Pricing</h4>
+<ul>
+<li><strong>AWS ALB</strong>: <del>$0.0225/hour + $0.008/LCU-hour (</del>$16/month base)</li>
+<li><strong>Azure App Gateway</strong>: <del>$0.125/hour (v2) + data processing (</del>$90/month base)</li>
+<li><strong>GCP Cloud Load Balancing</strong>: $0.025/hour (global) + forwarding rules (~$18/month base)</li>
+</ul>
+<h4>GitOps Pricing</h4>
+<ul>
+<li><strong>ArgoCD/Flux</strong>: Free (compute costs only)</li>
+<li><strong>EKS Capabilities</strong>: Included with EKS (no additional cost)</li>
+<li><strong>Config Sync</strong>: Included with GKE (part of Anthos features)</li>
+</ul>
+<h3>C. Authentication Setup Examples</h3>
+<h4>AWS IRSA Setup</h4>
+<pre><code class="language-bash"># 1. Create IAM policy for CodeCommit
+cat &gt; codecommit-policy.json &lt;&lt;EOF
+{
+  &quot;Version&quot;: &quot;2012-10-17&quot;,
+  &quot;Statement&quot;: [
+    {
+      &quot;Effect&quot;: &quot;Allow&quot;,
+      &quot;Action&quot;: [
+        &quot;codecommit:CreateRepository&quot;,
+        &quot;codecommit:GetRepository&quot;,
+        &quot;codecommit:ListRepositories&quot;,
+        &quot;codecommit:GitPush&quot;,
+        &quot;codecommit:GitPull&quot;
+      ],
+      &quot;Resource&quot;: &quot;*&quot;
+    }
+  ]
+}
+EOF
+
+aws iam create-policy \
+  --policy-name CodeCommitProviderPolicy \
+  --policy-document file://codecommit-policy.json
+
+# 2. Create IAM role with trust relationship for IRSA
+eksctl create iamserviceaccount \
+  --name codecommit-provider-sa \
+  --namespace idpbuilder-system \
+  --cluster my-eks-cluster \
+  --attach-policy-arn arn:aws:iam::123456789012:policy/CodeCommitProviderPolicy \
+  --approve
+
+# 3. Verify service account annotation
+kubectl get sa codecommit-provider-sa -n idpbuilder-system -o yaml | grep eks.amazonaws.com/role-arn
+</code></pre>
+<h4>Azure Workload Identity Setup</h4>
+<pre><code class="language-bash"># 1. Enable Workload Identity on AKS cluster
+az aks update \
+  --resource-group my-rg \
+  --name my-aks-cluster \
+  --enable-oidc-issuer \
+  --enable-workload-identity
+
+# 2. Get OIDC issuer URL
+OIDC_ISSUER=$(az aks show --resource-group my-rg --name my-aks-cluster --query &quot;oidcIssuerProfile.issuerUrl&quot; -otsv)
+
+# 3. Create Azure AD application
+az ad app create --display-name idpbuilder-azure-repos
+
+# 4. Create service principal
+APP_ID=$(az ad app list --display-name idpbuilder-azure-repos --query [0].appId -o tsv)
+az ad sp create --id $APP_ID
+
+# 5. Create federated identity credential
+az ad app federated-credential create \
+  --id $APP_ID \
+  --parameters &#39;{
+    &quot;name&quot;: &quot;idpbuilder-azure-repos-federated&quot;,
+    &quot;issuer&quot;: &quot;&#39;$OIDC_ISSUER&#39;&quot;,
+    &quot;subject&quot;: &quot;system:serviceaccount:idpbuilder-system:azure-repos-provider-sa&quot;,
+    &quot;audiences&quot;: [&quot;api://AzureADTokenExchange&quot;]
+  }&#39;
+
+# 6. Assign Azure DevOps permissions
+SP_ID=$(az ad sp list --display-name idpbuilder-azure-repos --query [0].id -o tsv)
+# Note: Azure DevOps permissions are managed separately via Azure DevOps UI or API
+
+# 7. Create and annotate Kubernetes service account
+cat &lt;&lt;EOF | kubectl apply -f -
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: azure-repos-provider-sa
+  namespace: idpbuilder-system
+  annotations:
+    azure.workload.identity/client-id: $APP_ID
+    azure.workload.identity/tenant-id: $(az account show --query tenantId -o tsv)
+EOF
+</code></pre>
+<h4>GCP Workload Identity Setup</h4>
+<pre><code class="language-bash"># 1. Enable Workload Identity on GKE cluster (if not already enabled)
+gcloud container clusters update my-gke-cluster \
+  --region=us-central1 \
+  --workload-pool=my-gcp-project.svc.id.goog
+
+# 2. Create GCP service account
+gcloud iam service-accounts create cloud-source-repos-sa \
+  --display-name=&quot;Cloud Source Repos Provider SA&quot; \
+  --project=my-gcp-project
+
+# 3. Grant Cloud Source Repositories permissions
+gcloud projects add-iam-policy-binding my-gcp-project \
+  --member=&quot;serviceAccount:cloud-source-repos-sa@my-gcp-project.iam.gserviceaccount.com&quot; \
+  --role=&quot;roles/source.admin&quot;
+
+# 4. Bind Kubernetes SA to GCP SA
+gcloud iam service-accounts add-iam-policy-binding \
+  cloud-source-repos-sa@my-gcp-project.iam.gserviceaccount.com \
+  --role roles/iam.workloadIdentityUser \
+  --member &quot;serviceAccount:my-gcp-project.svc.id.goog[idpbuilder-system/cloud-source-repos-sa]&quot;
+
+# 5. Create and annotate Kubernetes service account
+cat &lt;&lt;EOF | kubectl apply -f -
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cloud-source-repos-sa
+  namespace: idpbuilder-system
+  annotations:
+    iam.gke.io/gcp-service-account: cloud-source-repos-sa@my-gcp-project.iam.gserviceaccount.com
+EOF
+</code></pre>
+<h3>D. Mixed Provider Example</h3>
+<h4>Example: AWS Infrastructure with ArgoCD (Open Source GitOps)</h4>
+<p>This demonstrates the flexibility of the duck-typed provider architecture:</p>
+<pre><code class="language-yaml">---
+# AWS CodeCommit for Git
+apiVersion: idpbuilder.cnoe.io/v1alpha1
+kind: CodeCommitProvider
+metadata:
+  name: codecommit-primary
+  namespace: idpbuilder-system
+spec:
+  region: us-east-1
+  auth:
+    type: IRSA
+    serviceAccountName: codecommit-provider-sa
+    roleArn: arn:aws:iam::123456789012:role/CodeCommitProviderRole
+
+---
+# AWS ALB for Gateway
+apiVersion: idpbuilder.cnoe.io/v1alpha1
+kind: AWSLoadBalancerProvider
+metadata:
+  name: aws-alb
+  namespace: idpbuilder-system
+spec:
+  namespace: kube-system
+  version: v2.8.1
+  aws:
+    region: us-east-1
+    clusterName: my-eks-cluster
+
+---
+# ArgoCD for GitOps (NOT EKS Capabilities)
+apiVersion: idpbuilder.cnoe.io/v1alpha1
+kind: ArgoCDProvider
+metadata:
+  name: argocd
+  namespace: idpbuilder-system
+spec:
+  namespace: argocd
+  version: v2.12.0
+
+---
+# Platform references all three providers
+apiVersion: idpbuilder.cnoe.io/v1alpha1
+kind: Platform
+metadata:
+  name: aws-hybrid
+  namespace: idpbuilder-system
+spec:
+  domain: idp.example.com
+  
+  components:
+    gitProviders:
+      - name: codecommit-primary
+        kind: CodeCommitProvider
+        namespace: idpbuilder-system
+    
+    gateways:
+      - name: aws-alb
+        kind: AWSLoadBalancerProvider
+        namespace: idpbuilder-system
+    
+    gitOpsProviders:
+      - name: argocd
+        kind: ArgoCDProvider
+        namespace: idpbuilder-system
+</code></pre>
+<p><strong>Benefits of this Configuration</strong>:</p>
+<ul>
+<li>Leverages AWS-native Git and ingress for optimal AWS integration</li>
+<li>Uses familiar ArgoCD for GitOps operations</li>
+<li>Preserves team expertise with ArgoCD</li>
+<li>Demonstrates provider substitutability via duck-typing</li>
+</ul>
+<h3>E. Migration Path Example</h3>
+<h4>Migrating from Gitea to AWS CodeCommit</h4>
+<pre><code class="language-yaml"># Step 1: Deploy CodeCommit provider alongside existing Gitea
+apiVersion: idpbuilder.cnoe.io/v1alpha1
+kind: CodeCommitProvider
+metadata:
+  name: codecommit-primary
+  namespace: idpbuilder-system
+spec:
+  region: us-east-1
+  auth:
+    type: IRSA
+    serviceAccountName: codecommit-provider-sa
+    roleArn: arn:aws:iam::123456789012:role/CodeCommitProviderRole
+
+---
+# Step 2: Update Platform CR to reference both providers temporarily
+apiVersion: idpbuilder.cnoe.io/v1alpha1
+kind: Platform
+metadata:
+  name: localdev
+  namespace: idpbuilder-system
+spec:
+  domain: cnoe.localtest.me
+  components:
+    gitProviders:
+      # Keep both during migration
+      - name: gitea-local
+        kind: GiteaProvider
+        namespace: idpbuilder-system
+      - name: codecommit-primary
+        kind: CodeCommitProvider
+        namespace: idpbuilder-system
+    # ... other components
+</code></pre>
+<p><strong>Migration Process</strong>:</p>
+<ol>
+<li>Deploy CodeCommit provider and wait for Ready status</li>
+<li>Migrate repository content (one-time sync from Gitea to CodeCommit)</li>
+<li>Update GitRepository CRs one-by-one to reference CodeCommit</li>
+<li>Verify each application continues to sync correctly</li>
+<li>Once all repositories migrated, remove Gitea reference from Platform CR</li>
+<li>Decommission Gitea provider</li>
+</ol>
+<h3>F. Troubleshooting Guide</h3>
+<h4>Common Issues and Solutions</h4>
+<p><strong>Issue: CodeCommit Provider IRSA Authentication Failing</strong></p>
+<pre><code class="language-bash"># Check service account annotations
+kubectl get sa codecommit-provider-sa -n idpbuilder-system -o yaml
+
+# Check IAM role trust policy
+aws iam get-role --role-name CodeCommitProviderRole
+
+# Verify OIDC provider is configured
+aws iam list-open-id-connect-providers
+</code></pre>
+<p><strong>Issue: Azure Workload Identity Not Working</strong></p>
+<pre><code class="language-bash"># Verify OIDC issuer is enabled
+az aks show --resource-group my-rg --name my-aks-cluster --query &quot;oidcIssuerProfile&quot;
+
+# Check federated credential
+az ad app federated-credential list --id &lt;APP_ID&gt;
+
+# Verify service account labels and annotations
+kubectl get sa azure-repos-provider-sa -n idpbuilder-system -o yaml
+</code></pre>
+<p><strong>Issue: GCP Workload Identity Binding Failure</strong></p>
+<pre><code class="language-bash"># Check Workload Identity pool
+gcloud container clusters describe my-gke-cluster --region=us-central1 --format=&quot;value(workloadIdentityConfig)&quot;
+
+# Verify IAM policy binding
+gcloud iam service-accounts get-iam-policy cloud-source-repos-sa@my-gcp-project.iam.gserviceaccount.com
+
+# Check service account annotation
+kubectl get sa cloud-source-repos-sa -n idpbuilder-system -o jsonpath=&#39;{.metadata.annotations}&#39;
+</code></pre>
+
+            </article>
+        </div>
+    </main>
+
+    <footer>
+        <div class="container">
+            <p>&copy; 2024 CNOE IDP Builder. Licensed under <a href="https://github.com/cnoe-io/idpbuilder/blob/main/LICENSE" target="_blank" rel="noopener">Apache License 2.0</a></p>
+        </div>
+    </footer>
+
+    <script>
+        function toggleMenu() {
+            const navLinks = document.getElementById('navLinks');
+            navLinks.classList.toggle('active');
+        }
+
+        document.addEventListener('click', function(event) {
+            const nav = document.querySelector('nav');
+            const navLinks = document.getElementById('navLinks');
+            
+            if (!nav.contains(event.target)) {
+                navLinks.classList.remove('active');
+            }
+        });
+    </script>
+</body>
+</html>

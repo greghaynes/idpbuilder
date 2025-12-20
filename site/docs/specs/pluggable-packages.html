@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Pluggable and configurable packaging proposal - IDP Builder Documentation">
+    <title>Pluggable and configurable packaging proposal | IDP Builder</title>
+    <link rel="stylesheet" href="../../css/style.css">
+    <script type="module">
+        import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+        mermaid.initialize({ 
+            startOnLoad: true,
+            theme: 'default',
+            securityLevel: 'loose'
+        });
+    </script>
+    <style>
+        .docs-container {
+            max-width: 900px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+        }
+        .breadcrumb {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            margin-bottom: 1rem;
+        }
+        .breadcrumb a {
+            color: var(--primary-color);
+            text-decoration: none;
+        }
+        .breadcrumb a:hover {
+            text-decoration: underline;
+        }
+        .markdown-content {
+            line-height: 1.6;
+        }
+        .markdown-content h1 {
+            border-bottom: 2px solid var(--border-color);
+            padding-bottom: 0.5rem;
+            margin-bottom: 1.5rem;
+        }
+        .markdown-content h2 {
+            margin-top: 2rem;
+            margin-bottom: 1rem;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 0.3rem;
+        }
+        .markdown-content h3 {
+            margin-top: 1.5rem;
+            margin-bottom: 0.75rem;
+        }
+        .markdown-content pre {
+            background-color: var(--bg-alt);
+            padding: 1rem;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        .markdown-content code {
+            background-color: var(--bg-alt);
+            padding: 0.2rem 0.4rem;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+        }
+        .markdown-content pre code {
+            background-color: transparent;
+            padding: 0;
+        }
+        .markdown-content blockquote {
+            border-left: 4px solid var(--primary-color);
+            padding-left: 1rem;
+            margin-left: 0;
+            color: var(--text-muted);
+        }
+        .markdown-content table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 1rem 0;
+        }
+        .markdown-content th,
+        .markdown-content td {
+            border: 1px solid var(--border-color);
+            padding: 0.5rem;
+            text-align: left;
+        }
+        .markdown-content th {
+            background-color: var(--bg-alt);
+            font-weight: bold;
+        }
+        .markdown-content a {
+            color: var(--primary-color);
+            text-decoration: none;
+        }
+        .markdown-content a:hover {
+            text-decoration: underline;
+        }
+        .markdown-content img {
+            max-width: 100%;
+            height: auto;
+        }
+        .markdown-content ul,
+        .markdown-content ol {
+            padding-left: 2rem;
+            margin: 1rem 0;
+        }
+        .markdown-content li {
+            margin: 0.5rem 0;
+        }
+        /* Mermaid diagram styling */
+        .markdown-content .mermaid {
+            background-color: transparent;
+            padding: 1rem;
+            margin: 1.5rem 0;
+            text-align: center;
+            overflow-x: auto;
+        }
+        .markdown-content pre.mermaid {
+            background-color: var(--bg-alt);
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <nav class="container">
+            <div class="logo">
+                <h1>IDP Builder</h1>
+            </div>
+            <button class="menu-toggle" aria-label="Toggle menu" onclick="toggleMenu()">
+                ☰
+            </button>
+            <ul class="nav-links" id="navLinks">
+                <li><a href="../../index.html">Home</a></li>
+                <li><a href="../index.html">Docs</a></li>
+                <li><a href="https://github.com/cnoe-io/idpbuilder" target="_blank" rel="noopener">GitHub</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <main class="container">
+        <div class="docs-container">
+            <div class="breadcrumb">
+                <a href="../../index.html">Home</a> / 
+                <a href="../index.html">Docs</a> / <a href="../index.html">Technical Specifications</a>
+            </div>
+            <article class="markdown-content">
+                <h1>Pluggable and configurable packaging proposal</h1>
+<h2>Background</h2>
+<p><code>idpbuilder</code> is a tool that aims to:</p>
+<ul>
+<li>Allow developers to stand up a Kubernetes cluster with components that make up a Internal Developer Platform (IDP). </li>
+<li>Allow for tests to run against IDPs in Continuous Integration systems.</li>
+<li>Standup a working IDP for demo purposes.</li>
+</ul>
+<p>It also aims to achieve the above goals while having a single dependency, Docker, at run time. </p>
+<p>When implementing IDPs using open source projects, there is no one set of projects that fit the needs of all organizations because:</p>
+<ol>
+<li>No organization went through the same path to reach the point of needing a IDP.</li>
+<li>Past technology choices were made for specific needs of each organization. This results in organizationally unique technology inertia that may not be correctable in the near future.</li>
+<li>No industry consensus and standards for choosing specific IDP components.</li>
+</ol>
+<p>To fit the needs from different organizations, idpbuilder needs to be flexible in the what and how it can deploy different packages. Currently idpbuilder uses ArgoCD to install a <a href="https://github.com/cnoe-io/idpbuilder/blob/56089e4ae3b27cf90641bfbff2a96c36dd5263e1/pkg/apps/resources.go#L20-L32">set of application</a>, and they cannot be changed without modifying the source code.</p>
+<p>In addition, the git server uses Go&#39;s embed capability to serve contents to ArgoCD.  Because of this, to update package configurations in idpbuilder, it requires compiling the Go application. For Go developers this approach is straightforward to work with. For non-Go developers, this approach may be frustrating when needing to debug errors from an unfamiliar language while compiling the program.</p>
+<h2>Goals</h2>
+<p>The proposal in this document should:</p>
+<ol>
+<li>Make the packages installed by <code>idpbuilder</code> configurable.</li>
+<li>Minimize the number of runtime dependencies necessary.</li>
+<li>Define an easy way to declare the packages to be installed.</li>
+<li>Allow for fast local development feedback loop.</li>
+</ol>
+<h2>Proposal</h2>
+<p>This document proposes the following:</p>
+<ul>
+<li>Make ArgoCD a hard requirement for now.</li>
+<li>Define packages as Argo CD Applications (Helm, Kustomize, and raw manifests)</li>
+<li>Use a more configurable Git server, Gitea. </li>
+<li>Imperative pipelines for configuring packages are handled with ArgoCD resource hooks.</li>
+</ul>
+<p>In this implementation, we will make ArgoCD the technology of choice. However, we will strive to maintain separation between packages and specific CD technologies (Argo) to allow for future CD plug-ability.</p>
+<p><img src="../images/git.png" alt="git"></p>
+<h3>Essential Packages</h3>
+<p>For <code>idpbuilder</code> to make the cluster ready to be used for non-essential packages, it must install:</p>
+<ol>
+<li>In-cluster git server</li>
+<li>ArgoCD</li>
+<li>Ingress for git server and ArgoCD</li>
+</ol>
+<p>Once they are installed and ready, the manifests used should be pushed to an in-cluster git repository.
+The packages then can be managed by ArgoCD from that point. 
+This allows for end users to make changes to them through GitOps by either using the Git UI or locally through Git pull / push.  </p>
+<h3>ArgoCD</h3>
+<p>Currently, ArgoCD is a base requirement for both the AWS reference implementation and idpbuilder but not yet officially made a hard requirement. ArgoCD is the CD of choice for CNOE members and it should be the focus over other GitOps solutions. 
+Packages then become the formats that ArgoCD supports natively: Helm charts, Kustomize, and raw manifests.</p>
+<h4>Support for imperative pipelines</h4>
+<p>Regardless of how applications are delivered declaratively, custom scripts are often needed before, during, and after application syncing to ensure applications reach the desired state. idpbuilder needs to provide a way to run custom scripts in a defined order. </p>
+<p>We could define a spec to support such cases, but considering the main use cases of idpbuilder center around everything being local, it doesn&#39;t require overly complex tasks. For example, in the reference implementation for AWS, the majority of scripting are done to manage authentication mechanisms. Another task that the scripts do is domain name configuration for each package such as setting the <code>baseUrl</code> field in the Backstage configuration file. In local environments, tasks like these are likely unnecessary because authentication is not necessary and domain names are predictable.</p>
+<p>ArgoCD supports resource hooks which allow users to define tasks to be run during application syncing. While there are some limitations to what it can do, for the majority of simple tasks resource hooks should suffice.</p>
+<h3>The in-cluster git server</h3>
+<p>The primary purpose of the in-cluster git server is to sync local files to it, then make them available for ArgoCD to use.</p>
+<p>As documented in <a href="https://github.com/cnoe-io/idpbuilder/issues/32">this issue</a>, using <code>gitea</code> offers more configurable and user friendly experience. In short, using it enables:</p>
+<ul>
+<li>Git UI and ssh access for end users.</li>
+<li>More configurable git server.</li>
+<li>Include the source control system as a core component for a developer platform.</li>
+<li>Move the outdated git dependency to a more modern and actively supported dependency.</li>
+</ul>
+<p><code>gittea</code> offers installation into Kubernetes cluster using a helm chart. It should be leveraged to install it to the local cluster. The ideal way to install this would be to use ArgoCD. However, ArgoCD requires a Git server to read Helm values from. It is possible to host the values file on a public repository, but the idpbuilder core components should avoid depending on external systems. In secured environments, it may be impossible for ArgoCD to reach the public repository.</p>
+<p>It should follow the same pattern of installing ArgoCD by embedding them in the application binary. The manifests should be rendered at build time by using the <code>helm template</code> command with values checked into the repository.</p>
+<p>In case the embedded configuration does not work for some reason, we should provide a flag, <code>--git-manifest-file</code>. When used, it specifies a single file that contains manifests necessary to configure a git server. </p>
+<p>It is important to note that the file contains raw manifests that will be applied as-is, not helm values. Supporting manifest rendering mechanisms come with a cost of needing to include and maintain libraries and light logic to render these manifests. One of the goals of this proposal is to minimize dependencies.
+It&#39;s also difficult to ensure rendered manifests are what users intended to use. Users may have different versions of helm from our version. This may cause slight differences in manifests due to a bug or a feature differences.
+Users are expected to run the <code>helm template</code> command to generate manifests.</p>
+<h3>Runtime Git server content generation</h3>
+<p>As mentioned earlier, Git server contents are generated at compile time and cannot be changed at run time.
+To solve this, Git content should be created at run time by introducing a new flag, <code>--package</code>, to idpbuilder. This flag takes a directory that contains ArgoCD Applications. 
+If this flag is not specified, use the embedded FS to provide the &quot;default experience&quot; where it uses the manifests provided at compile time to bootstrap and add predetermined packages to the cluster.</p>
+<p>Because Helm and Kustomize can reference remote repositories, this approach introduces a use case where secrets must be passed to the cluster from local machine. Kubernetes resource YAML files are often stored on a private Git server and require credentials to access. For ArgoCD to access the Git server, the credentials must be passed to ArgoCD as Kubernetes Secrets. </p>
+<p>To accomplish this, idpbuilder will provide a flag to pass secrets and other ArgoCD configuration options. <code>--argocd-config</code> flag should point to a directory with manifests for configuring ArgoCD, ConfigMaps and Secrets. These manifests will be applied after ArgoCD is deployed and ready. An example directory contents are shown below.</p>
+<pre><code class="language-yaml"># --argocd-config ./configs
+apiVersion: v1
+kind: Secret
+metadata:
+  name: argo-helm
+  namespace: argocd
+  labels:
+    argocd.argoproj.io/secret-type: repository
+stringData:
+  name: argo
+  url: https://argoproj.github.io/argo-helm
+  type: helm
+  username: my-username
+  password: my-password
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-cm
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: argocd-cm
+    app.kubernetes.io/part-of: argocd
+data:
+  url: https://argo-cd-demo.argoproj.io
+</code></pre>
+<h4>Local file handling</h4>
+<p>To allow for faster feedback loop when developing Kubernetes applications and manifests, idpbuilder should support pushing local files to the in-cluster git repository if sources are specified using <code>files://</code>. 
+Given the following application:</p>
+<pre><code class="language-yaml">apiVersion: argoproj.io/v1alpha1
+kind: Application
+spec:
+  sources:
+    - path: argo-workflows
+      repoURL: &quot;files://test-package&quot;
+      targetRevision: HEAD
+</code></pre>
+<p>idpbuilder must:</p>
+<ul>
+<li>Take and validate all manifests under the <code>test-package</code> directory. </li>
+<li>Create a new repository in the in-cluster git server.</li>
+<li>Push the files to the repository.</li>
+<li>Replace <code>files://</code> with <code>https://git-server.git.svc.cluster.local</code></li>
+</ul>
+<h2>Future improvements</h2>
+<ul>
+<li>Extend support for using different tools for CD and imperative workflows. For example, we may consider supporting Tekton or Flagger for running imperative workflows.</li>
+<li>Extend support for other GitOps solutions such as Flux CD.</li>
+<li>Add support for authentication. As use cases grow, it will be necessary to support authentication mechanisms. Example use cases: GitHub credentials for ArgoCD, AWS credentials to pull images from a ECR registry.</li>
+<li>Add support for capturing Kubernetes job outputs that were launched by ArgoCD Resource Hooks. Stdout and stderr are not saved for completed jobs by default. This will help debug problems when running imperative commands in Kubernetes Jobs.</li>
+<li>Support for ArgoCD App of Apps. An App of Apps is an ArgoCD application that contains other ArgoCD applications. Support for this would require: <ul>
+<li>Rendering Helm charts and Kustomize.</li>
+<li>Sync repository contents, then parse and replace URLs as described above.</li>
+</ul>
+</li>
+</ul>
+<h2>Alternatives Considered</h2>
+<h4>Use OCI images as applications</h4>
+<p>Projects such as Sealer and Kapp aim to use OCI images as the artifact to define and deploy multiple Kubernetes resources. This has a few advantages. </p>
+<ul>
+<li>Immutable single artifact that can be used to deploy to different clusters.</li>
+<li>Simplicity. Application dependencies and supporting resources are defined and confined in the image.</li>
+<li>Can use standard Kubernetes YAML files, Helm Charts, and Kustomize. </li>
+<li>Native support for signing and verification through industry standard tools like cosign.</li>
+</ul>
+<p>In addition, both tools support applying changes in particular order. For example, you can run a Kubernetes Job to migrate database schema before rolling out a new image. </p>
+<p>Since many of the goals are covered by both projects, it is possible to incorporate some of their tools and libraries to implement our goals. </p>
+<p>While this approach addresses most of our goals, there are drawbacks.</p>
+<p>Firstly, it introduces a new layer for end users to debug. For end users to debug an issue related to Kubernetes manifest rendering, they now need to:</p>
+<ol>
+<li>Figure out which OCI image contains the package with the problem. The problem may reside in one of dependent OCI images. </li>
+<li>Extract the contents of the OCI image. Determine which one file is responsible for the issue. </li>
+<li>Correct the issue.</li>
+<li>Publish a new image.</li>
+</ol>
+<p>Secondly, these tools and using OCI images as packages are not well adopted by CNOE members as evidenced by the tech radar. idpbuilder should be useful and relevant to CNOE members.</p>
+<h4>Define specs for imperative work</h4>
+<p>To support use cases where more complex steps are needed to orchestrate different services in to the cluster, idpbuilder could define a configuration spec where end users can define their own steps. For example, a spec may look something like the following. </p>
+<pre><code class="language-yaml">apiVersion: idpbuilder.cnoe.io/v1alpha1
+kind: Config
+metadata:
+  name: test
+spec:
+  packages:
+    - name: crossplane
+      preCreation:
+        - name: job1
+          secretRef:
+            name: job1
+            path: ./secret1
+          type: helm
+          chart:
+            values: ./values.yaml
+            url: &quot;https://somewhere.cnoe.io/charts&quot;
+          spec:
+            apiVersion: batch/v1
+            kind: Job
+            metadata:
+              name: pi
+      postCreation:
+        ...
+</code></pre>
+<p>This introduces a few problems. </p>
+<ol>
+<li><p>Complexity.</p>
+<p> This introduces a completely new mechanisms to manage applications. Current idpbuilder design is very simple with no concept of pipelining. It allows end users to define manifests at compile time, and apply them as Argo CD applications. Introducing this feature and maintaining it may involve significant time commitment.</p>
+</li>
+<li><p>Yet another configuration format.</p>
+<p> With the explosion of Kubernetes based projects, a large number of configuration formats were created. Developers and operators are already needing to write and manage configuration files that look similar but slightly different.</p>
+</li>
+<li><p>No clear needs for task orchestration capabilities.</p>
+<p> We have so far not had a request for this capability with concrete needs and investing time and effort to implement and maintain this feature doesn&#39;t work.</p>
+</li>
+</ol>
+<h4>Git Repository Mirroring</h4>
+<p>Another approach is to mirror contents from repositories using credentials from local machine, then push them to the in-cluster git server. This does not require credentials to be replicated to the cluster. A few consideration for this approach: </p>
+<ol>
+<li><p>Kustomize references to private remotes.
+ kustomize can reference remote repositories:</p>
+<pre><code class="language-yaml">  # kustomization.yaml
+  resources:
+  - https://github.com/kubernetes-sigs/kustomize//examples/multibases?timeout=120&amp;ref=v3.3.1
+  namePrefix: remote-
+</code></pre>
+<p> In this example, to ensure the local git server has everything ArgoCD needs, idpbuilder must:</p>
+<ul>
+<li>Pull manifests from <code>github.com/kubernetes-sigs/kustomize</code></li>
+<li>Create a new repository in in-cluster git server.</li>
+<li>Push contents to the in-cluster repository.</li>
+<li>Replace <code>github.com</code> with <code>git-server.git.svc.cluster.local</code></li>
+</ul>
+</li>
+<li><p>Helm subcharts from private repositories.
+ Helm subcharts may look like</p>
+<pre><code># Chart.yaml
+dependencies:
+- name: nginx
+  version: &quot;1.2.3&quot;
+  repository: &quot;https://example.com/charts&quot;
+</code></pre>
+<p> In this example, idpbuilder must:</p>
+<ul>
+<li>Pull <code>chart.tgz</code> for the nginx chart.</li>
+<li>Push it to a in-cluster http server.</li>
+<li>Replace <code>example.com</code> with <code>http-endpoint.git.svc.cluster.local</code></li>
+</ul>
+</li>
+</ol>
+<p>Given the complexity involved with this approach, the first iteration should focus on passing secrets to ArgoCD. When concrete use cases arise, approaches similar to this should be considered.</p>
+<h6>ArgoCD Application handling</h6>
+<p>Consider a case where idpbuilder is given the flag <code>--package ./packages</code>, and the <code>packages</code> directory contains a yaml file for a ArgoCD application.</p>
+<pre><code class="language-yaml">apiVersion: argoproj.io/v1alpha1
+kind: Application
+spec:
+  sources:
+    - chart: argo-workflows
+      repoURL: https://argoproj.github.io/argo-helm
+      targetRevision: 0.31.0
+      helm:
+        releaseName: argo-workflows
+        valueFiles:
+          - $values/packages/argo-workflows/dev/values.yaml
+    - repoURL: https://github.com/cnoe-io/argo-helm
+      targetRevision: HEAD
+      ref: values
+</code></pre>
+<p>In the above file, it instructs ArgoCD to use the charts from <code>argoproj.github.io/argo-helm</code> and use values stored at <code>https://github.com/cnoe-io/argo-helm/packages/argo-workflows/dev/values.yaml</code></p>
+<p>In this case, idpbuilder must: </p>
+<ul>
+<li>Replace <code>argoproj.github.io</code> with <code>http-endpoint.git.svc.cluster.local</code>.</li>
+<li>Replace <code>github.com</code> with <code>git-server.git.svc.cluster.local</code>.</li>
+</ul>
+
+            </article>
+        </div>
+    </main>
+
+    <footer>
+        <div class="container">
+            <p>&copy; 2024 CNOE IDP Builder. Licensed under <a href="https://github.com/cnoe-io/idpbuilder/blob/main/LICENSE" target="_blank" rel="noopener">Apache License 2.0</a></p>
+        </div>
+    </footer>
+
+    <script>
+        function toggleMenu() {
+            const navLinks = document.getElementById('navLinks');
+            navLinks.classList.toggle('active');
+        }
+
+        document.addEventListener('click', function(event) {
+            const nav = document.querySelector('nav');
+            const navLinks = document.getElementById('navLinks');
+            
+            if (!nav.contains(event.target)) {
+                navLinks.classList.remove('active');
+            }
+        });
+    </script>
+</body>
+</html>
