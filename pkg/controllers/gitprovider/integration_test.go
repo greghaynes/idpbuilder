@@ -212,12 +212,13 @@ func TestPlatformWithoutGiteaProvider(t *testing.T) {
 	_, err = platformReconciler.Reconcile(ctx, req)
 	require.NoError(t, err)
 
-	// Verify Platform is ready (no providers to wait for)
+	// Verify Platform is initializing (no providers configured)
 	updatedPlatform := &v1alpha2.Platform{}
 	err = fakeClient.Get(ctx, req.NamespacedName, updatedPlatform)
 	require.NoError(t, err)
 
-	assert.Equal(t, "Ready", updatedPlatform.Status.Phase)
+	// In v2, Platform without providers is "Initializing" not "Ready"
+	assert.Equal(t, "Initializing", updatedPlatform.Status.Phase)
 	assert.Len(t, updatedPlatform.Status.Providers.GitProviders, 0)
 }
 
