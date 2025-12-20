@@ -2,13 +2,12 @@ package localbuild
 
 import (
 	"context"
-	"embed"
 	"encoding/base64"
 	"fmt"
-	"github.com/cnoe-io/idpbuilder/pkg/k8s"
 	"net/http"
 
 	"github.com/cnoe-io/idpbuilder/api/v1alpha1"
+	"github.com/cnoe-io/idpbuilder/pkg/controllers/gitprovider/gitea"
 	"github.com/cnoe-io/idpbuilder/pkg/util"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -21,11 +20,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-//go:embed resources/gitea/k8s/*
-var installGiteaFS embed.FS
-
 func RawGiteaInstallResources(templateData any, config v1alpha1.PackageCustomization, scheme *runtime.Scheme) ([][]byte, error) {
-	return k8s.BuildCustomizedManifests(config.FilePath, "resources/gitea/k8s", installGiteaFS, scheme, templateData)
+	return gitea.RawGiteaInstallResources(templateData, config, scheme)
 }
 
 func (r *LocalbuildReconciler) newGiteaAdminSecret(password string) corev1.Secret {
@@ -39,10 +35,10 @@ func (r *LocalbuildReconciler) newGiteaAdminSecret(password string) corev1.Secre
 
 func (r *LocalbuildReconciler) ReconcileGitea(ctx context.Context, req ctrl.Request, resource *v1alpha1.Localbuild) (ctrl.Result, error) {
 	logger := log.FromContext(ctx, "installer", "gitea")
-	gitea := EmbeddedInstallation{
+	giteaInstall := EmbeddedInstallation{
 		name:         "Gitea",
-		resourcePath: "resources/gitea/k8s",
-		resourceFS:   installGiteaFS,
+		resourcePath: "resources/k8s",
+		resourceFS:   gitea.InstallGiteaFS,
 		namespace:    util.GiteaNamespace,
 		monitoredResources: map[string]schema.GroupVersionKind{
 			"my-gitea": {
@@ -70,7 +66,7 @@ func (r *LocalbuildReconciler) ReconcileGitea(ctx context.Context, req ctrl.Requ
 			if err != nil {
 				return ctrl.Result{}, fmt.Errorf("generating gitea admin secret: %w", err)
 			}
-			gitea.unmanagedResources = []client.Object{&giteaCreds}
+			giteaInstall.unmanagedResources = []client.Object{&giteaCreds}
 			sec = giteaCreds
 		} else {
 			return ctrl.Result{}, fmt.Errorf("getting gitea secret: %w", err)
@@ -79,10 +75,10 @@ func (r *LocalbuildReconciler) ReconcileGitea(ctx context.Context, req ctrl.Requ
 
 	v, ok := resource.Spec.PackageConfigs.CorePackageCustomization[v1alpha1.GiteaPackageName]
 	if ok {
-		gitea.customization = v
+		giteaInstall.customization = v
 	}
 
-	if result, err := gitea.Install(ctx, resource, r.Client, r.Scheme, r.Config); err != nil {
+	if result, err := giteaInstall.Install(ctx, resource, r.Client, r.Scheme, r.Config); err != nil {
 		return result, err
 	}
 

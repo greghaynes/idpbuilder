@@ -33,7 +33,12 @@ const (
 )
 
 //go:embed resources/k8s/*
-var installGiteaFS embed.FS
+var InstallGiteaFS embed.FS
+
+// RawGiteaInstallResources returns the raw Gitea installation resources
+func RawGiteaInstallResources(templateData any, config v1alpha1.PackageCustomization, scheme *runtime.Scheme) ([][]byte, error) {
+	return k8s.BuildCustomizedManifests(config.FilePath, "resources/k8s", InstallGiteaFS, scheme, templateData)
+}
 
 // GiteaProviderReconciler reconciles a GiteaProvider object
 type GiteaProviderReconciler struct {
@@ -196,7 +201,7 @@ func (r *GiteaProviderReconciler) installGiteaResources(ctx context.Context, pro
 	logger := log.FromContext(ctx)
 
 	// Use the embedded Gitea resources
-	rawResources, err := k8s.BuildCustomizedManifests(v1alpha1.PackageCustomization{}.FilePath, "resources/k8s", installGiteaFS, r.Scheme, r.Config)
+	rawResources, err := k8s.BuildCustomizedManifests(v1alpha1.PackageCustomization{}.FilePath, "resources/k8s", InstallGiteaFS, r.Scheme, r.Config)
 	if err != nil {
 		return fmt.Errorf("getting Gitea manifests: %w", err)
 	}
