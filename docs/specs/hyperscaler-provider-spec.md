@@ -103,46 +103,42 @@ This specification extends the [Controller-Based Architecture Specification](./c
 
 The hyperscaler providers integrate seamlessly into the existing controller-based architecture by implementing the same duck-typed status fields as their open-source counterparts:
 
+```mermaid
+graph TB
+    Platform["<b>Platform CR (Unchanged)</b><br/>Orchestrates all providers via duck-typed references"]
+    
+    Platform -->|References by name & kind| Git["<b>Git Providers</b><br/>(Duck-Typed)"]
+    Platform -->|References by name & kind| Gateway["<b>Gateway Providers</b><br/>(Duck-Typed)"]
+    Platform -->|References by name & kind| GitOps["<b>GitOps Providers</b><br/>(Duck-Typed)"]
+    
+    Git -.-> GitOpen["Open Source:<br/>• GiteaProvider<br/>• GitHubProvider<br/>• GitLabProvider"]
+    Git -.-> GitAWS["AWS:<br/>• CodeCommit Provider"]
+    Git -.-> GitAzure["Azure:<br/>• AzureRepos Provider"]
+    Git -.-> GitGCP["GCP:<br/>• CloudSource Repositories"]
+    
+    Gateway -.-> GatewayOpen["Open Source:<br/>• NginxGateway<br/>• EnvoyGateway<br/>• IstioGateway"]
+    Gateway -.-> GatewayAWS["AWS:<br/>• ALBController"]
+    Gateway -.-> GatewayAzure["Azure:<br/>• AppGateway IngressCtrl"]
+    Gateway -.-> GatewayGCP["GCP:<br/>• GKEGateway Controller"]
+    
+    GitOps -.-> GitOpsOpen["Open Source:<br/>• ArgoCDProvider<br/>• FluxProvider"]
+    GitOps -.-> GitOpsAWS["AWS Unique:<br/>• EKSCapabilities"]
+    GitOps -.-> GitOpsAzure["Azure:<br/>• FluxAzureProvider"]
+    GitOps -.-> GitOpsGCP["GCP:<br/>• ConfigSync Provider"]
+    
+    style Platform fill:#e1f5ff,stroke:#01579b
+    style Git fill:#fff9c4,stroke:#f57f17
+    style Gateway fill:#f3e5f5,stroke:#4a148c
+    style GitOps fill:#e8f5e9,stroke:#1b5e20
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                      Platform CR (Unchanged)                         │
-│  Orchestrates all providers via duck-typed references               │
-└─────────────────────────────────────────────────────────────────────┘
-                                 │
-                                 │ References providers by name & kind
-                                 │
-        ┌────────────────────────┼────────────────────────┐
-        │                        │                        │
-        ▼                        ▼                        ▼
-┌───────────────────┐  ┌──────────────────┐  ┌──────────────────────┐
-│  Git Providers    │  │ Gateway Providers│  │  GitOps Providers    │
-│  (Duck-Typed)     │  │  (Duck-Typed)    │  │  (Duck-Typed)        │
-├───────────────────┤  ├──────────────────┤  ├──────────────────────┤
-│ Open Source:      │  │ Open Source:     │  │ Open Source:         │
-│ • GiteaProvider   │  │ • NginxGateway   │  │ • ArgoCDProvider     │
-│ • GitHubProvider  │  │ • EnvoyGateway   │  │ • FluxProvider       │
-│ • GitLabProvider  │  │ • IstioGateway   │  │                      │
-│                   │  │                  │  │ AWS Unique:          │
-│ AWS:              │  │ AWS:             │  │ • EKSCapabilities    │
-│ • CodeCommit      │  │ • ALBController  │  │                      │
-│   Provider        │  │                  │  │ Azure:               │
-│                   │  │ Azure:           │  │ • FluxAzureProvider  │
-│ Azure:            │  │ • AppGateway     │  │                      │
-│ • AzureRepos      │  │   IngressCtrl    │  │ GCP:                 │
-│   Provider        │  │                  │  │ • ConfigSync         │
-│                   │  │ GCP:             │  │   Provider           │
-│ GCP:              │  │ • GKEGateway     │  │                      │
-│ • CloudSource     │  │   Controller     │  │                      │
-│   Repositories    │  │                  │  │                      │
-└───────────────────┘  └──────────────────┘  └──────────────────────┘
 
-All providers expose standard duck-typed status fields:
+**All providers expose standard duck-typed status fields:**
 
-Git Providers:        Gateway Providers:      GitOps Providers:
-• endpoint           • ingressClassName      • endpoint
-• internalEndpoint   • loadBalancerEndpoint  • internalEndpoint
-• credentialsRef     • internalEndpoint      • credentialsRef
-```
+| Provider Type | Status Fields |
+|---------------|---------------|
+| **Git Providers** | • endpoint<br/>• internalEndpoint<br/>• credentialsRef |
+| **Gateway Providers** | • ingressClassName<br/>• loadBalancerEndpoint<br/>• internalEndpoint |
+| **GitOps Providers** | • endpoint<br/>• internalEndpoint<br/>• credentialsRef |
 
 ### Cloud Provider IAM Integration
 
