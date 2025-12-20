@@ -1,4 +1,4 @@
-package gitea
+package gitprovider
 
 import (
 	"context"
