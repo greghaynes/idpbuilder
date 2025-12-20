@@ -105,18 +105,18 @@ func TestNginxGatewayReconciler_getControllerStatus(t *testing.T) {
 	_ = appsv1.AddToScheme(scheme)
 
 	tests := []struct {
-		name               string
-		deployment         *appsv1.Deployment
-		expectReplicas     int32
+		name                string
+		deployment          *appsv1.Deployment
+		expectReplicas      int32
 		expectReadyReplicas int32
-		expectError        bool
+		expectError         bool
 	}{
 		{
-			name:               "deployment not found",
-			deployment:         nil,
-			expectReplicas:     0,
+			name:                "deployment not found",
+			deployment:          nil,
+			expectReplicas:      0,
 			expectReadyReplicas: 0,
-			expectError:        true,
+			expectError:         true,
 		},
 		{
 			name: "deployment with replicas",
@@ -130,9 +130,9 @@ func TestNginxGatewayReconciler_getControllerStatus(t *testing.T) {
 					ReadyReplicas: 1,
 				},
 			},
-			expectReplicas:     2,
+			expectReplicas:      2,
 			expectReadyReplicas: 1,
-			expectError:        false,
+			expectError:         false,
 		},
 	}
 
@@ -171,4 +171,3 @@ func TestNginxGatewayReconciler_getControllerStatus(t *testing.T) {
 		})
 	}
 }
-
