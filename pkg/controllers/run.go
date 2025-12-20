@@ -5,7 +5,10 @@ import (
 
 	"github.com/cnoe-io/idpbuilder/api/v1alpha1"
 	"github.com/cnoe-io/idpbuilder/pkg/controllers/custompackage"
+<<<<<<< HEAD
 	"github.com/cnoe-io/idpbuilder/pkg/controllers/gatewayprovider"
+=======
+>>>>>>> e80fabe238dea06ad2955e98ff105f30d015ec1b
 	"github.com/cnoe-io/idpbuilder/pkg/controllers/gitprovider"
 	"github.com/cnoe-io/idpbuilder/pkg/controllers/platform"
 	"github.com/cnoe-io/idpbuilder/pkg/util"
@@ -86,6 +89,7 @@ func RunControllers(
 		return err
 	}
 
+<<<<<<< HEAD
 	// Run NginxGateway controller
 	if err := (&gatewayprovider.NginxGatewayReconciler{
 		Client: mgr.GetClient(),
@@ -96,6 +100,8 @@ func RunControllers(
 		return err
 	}
 
+=======
+>>>>>>> e80fabe238dea06ad2955e98ff105f30d015ec1b
 	// Start our manager in another goroutine
 	logger.V(1).Info("starting manager")
 
