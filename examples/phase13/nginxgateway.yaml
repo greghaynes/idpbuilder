@@ -1,0 +1,18 @@
+---
+# Example NginxGateway provider configuration
+apiVersion: idpbuilder.cnoe.io/v1alpha2
+kind: NginxGateway
+metadata:
+  name: nginx-gateway
+  namespace: idpbuilder-system
+spec:
+  # Namespace where Nginx Ingress Controller will be deployed
+  namespace: ingress-nginx
+  
+  # Version of Nginx Ingress Controller
+  version: "1.13.0"
+  
+  # Ingress class configuration
+  ingressClass:
+    name: nginx
+    isDefault: true

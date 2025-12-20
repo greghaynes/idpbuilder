@@ -1,0 +1,30 @@
+---
+# Example Platform configuration with all three provider types
+apiVersion: idpbuilder.cnoe.io/v1alpha2
+kind: Platform
+metadata:
+  name: localdev
+  namespace: idpbuilder-system
+spec:
+  # Base domain for the platform
+  domain: cnoe.localtest.me
+  
+  # Platform components with provider references
+  components:
+    # Git providers
+    gitProviders:
+      - name: gitea-local
+        kind: GiteaProvider
+        namespace: idpbuilder-system
+    
+    # Gateway providers
+    gateways:
+      - name: nginx-gateway
+        kind: NginxGateway
+        namespace: idpbuilder-system
+    
+    # GitOps providers
+    gitOpsProviders:
+      - name: argocd
+        kind: ArgoCDProvider
+        namespace: idpbuilder-system

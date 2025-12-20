@@ -1,0 +1,25 @@
+---
+# Example ArgoCDProvider configuration
+apiVersion: idpbuilder.cnoe.io/v1alpha2
+kind: ArgoCDProvider
+metadata:
+  name: argocd
+  namespace: idpbuilder-system
+spec:
+  # Namespace where ArgoCD will be deployed
+  namespace: argocd
+  
+  # Version of ArgoCD
+  version: "v2.12.0"
+  
+  # Admin credentials configuration
+  adminCredentials:
+    # Auto-generate admin credentials if not provided
+    autoGenerate: true
+  
+  # ArgoCD projects to create
+  projects:
+    - name: default
+      description: Default project
+    - name: platform
+      description: Platform components

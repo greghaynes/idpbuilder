@@ -89,12 +89,48 @@ func (r *PlatformReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{RequeueAfter: defaultRequeueTime}, nil
 	}
 
+	// Reconcile Gateway providers
+	gatewaysSummary, allGatewaysReady, err := r.reconcileGateways(ctx, platform)
+	if err != nil {
+		logger.Error(err, "Failed to reconcile gateways")
+		meta.SetStatusCondition(&platform.Status.Conditions, metav1.Condition{
+			Type:    "Ready",
+			Status:  metav1.ConditionFalse,
+			Reason:  "GatewaysFailed",
+			Message: err.Error(),
+		})
+		platform.Status.Phase = "Failed"
+		if statusErr := r.Status().Update(ctx, platform); statusErr != nil {
+			logger.Error(statusErr, "Failed to update status")
+		}
+		return ctrl.Result{RequeueAfter: defaultRequeueTime}, nil
+	}
+
+	// Reconcile GitOps providers
+	gitOpsProvidersSummary, allGitOpsProvidersReady, err := r.reconcileGitOpsProviders(ctx, platform)
+	if err != nil {
+		logger.Error(err, "Failed to reconcile GitOps providers")
+		meta.SetStatusCondition(&platform.Status.Conditions, metav1.Condition{
+			Type:    "Ready",
+			Status:  metav1.ConditionFalse,
+			Reason:  "GitOpsProvidersFailed",
+			Message: err.Error(),
+		})
+		platform.Status.Phase = "Failed"
+		if statusErr := r.Status().Update(ctx, platform); statusErr != nil {
+			logger.Error(statusErr, "Failed to update status")
+		}
+		return ctrl.Result{RequeueAfter: defaultRequeueTime}, nil
+	}
+
 	// Update Platform status with aggregated provider status
 	platform.Status.Providers.GitProviders = gitProvidersSummary
+	platform.Status.Providers.Gateways = gatewaysSummary
+	platform.Status.Providers.GitOpsProviders = gitOpsProvidersSummary
 	platform.Status.ObservedGeneration = platform.Generation
 
 	// Determine overall platform readiness
-	allReady := allGitProvidersReady
+	allReady := allGitProvidersReady && allGatewaysReady && allGitOpsProvidersReady
 
 	if !allReady {
 		logger.V(1).Info("Not all providers are ready, requeuing")
@@ -205,6 +241,136 @@ func (r *PlatformReconciler) handleDeletion(ctx context.Context, platform *v1alp
 	}
 
 	return ctrl.Result{}, nil
+}
+
+// reconcileGateways reconciles all Gateway provider references and returns aggregated status
+func (r *PlatformReconciler) reconcileGateways(ctx context.Context, platform *v1alpha2.Platform) ([]v1alpha2.ProviderStatusSummary, bool, error) {
+	logger := log.FromContext(ctx)
+	var summary []v1alpha2.ProviderStatusSummary
+	allReady := true
+
+	for _, providerRef := range platform.Spec.Components.Gateways {
+		logger.V(1).Info("Processing gateway provider", "name", providerRef.Name, "kind", providerRef.Kind)
+
+		// Fetch the provider using unstructured client for duck-typing
+		gvk := schema.GroupVersionKind{
+			Group:   v1alpha2.GroupVersion.Group,
+			Version: v1alpha2.GroupVersion.Version,
+			Kind:    providerRef.Kind,
+		}
+
+		obj := &unstructured.Unstructured{}
+		obj.SetGroupVersionKind(gvk)
+
+		err := r.Get(ctx, types.NamespacedName{
+			Name:      providerRef.Name,
+			Namespace: providerRef.Namespace,
+		}, obj)
+
+		if err != nil {
+			if errors.IsNotFound(err) {
+				logger.Info("Gateway provider not found", "name", providerRef.Name, "kind", providerRef.Kind)
+				summary = append(summary, v1alpha2.ProviderStatusSummary{
+					Name:  providerRef.Name,
+					Kind:  providerRef.Kind,
+					Ready: false,
+				})
+				allReady = false
+				continue
+			}
+			return nil, false, fmt.Errorf("failed to get gateway provider kind=%s name=%s: %w", providerRef.Kind, providerRef.Name, err)
+		}
+
+		// Use duck-typing to get provider status
+		providerStatus, err := provider.GetGatewayProviderStatus(obj)
+		if err != nil {
+			logger.Error(err, "Failed to get gateway provider status using duck-typing", "name", providerRef.Name)
+			summary = append(summary, v1alpha2.ProviderStatusSummary{
+				Name:  providerRef.Name,
+				Kind:  providerRef.Kind,
+				Ready: false,
+			})
+			allReady = false
+			continue
+		}
+
+		summary = append(summary, v1alpha2.ProviderStatusSummary{
+			Name:  providerRef.Name,
+			Kind:  providerRef.Kind,
+			Ready: providerStatus.Ready,
+		})
+
+		if !providerStatus.Ready {
+			allReady = false
+		}
+	}
+
+	return summary, allReady, nil
+}
+
+// reconcileGitOpsProviders reconciles all GitOps provider references and returns aggregated status
+func (r *PlatformReconciler) reconcileGitOpsProviders(ctx context.Context, platform *v1alpha2.Platform) ([]v1alpha2.ProviderStatusSummary, bool, error) {
+	logger := log.FromContext(ctx)
+	var summary []v1alpha2.ProviderStatusSummary
+	allReady := true
+
+	for _, providerRef := range platform.Spec.Components.GitOpsProviders {
+		logger.V(1).Info("Processing GitOps provider", "name", providerRef.Name, "kind", providerRef.Kind)
+
+		// Fetch the provider using unstructured client for duck-typing
+		gvk := schema.GroupVersionKind{
+			Group:   v1alpha2.GroupVersion.Group,
+			Version: v1alpha2.GroupVersion.Version,
+			Kind:    providerRef.Kind,
+		}
+
+		obj := &unstructured.Unstructured{}
+		obj.SetGroupVersionKind(gvk)
+
+		err := r.Get(ctx, types.NamespacedName{
+			Name:      providerRef.Name,
+			Namespace: providerRef.Namespace,
+		}, obj)
+
+		if err != nil {
+			if errors.IsNotFound(err) {
+				logger.Info("GitOps provider not found", "name", providerRef.Name, "kind", providerRef.Kind)
+				summary = append(summary, v1alpha2.ProviderStatusSummary{
+					Name:  providerRef.Name,
+					Kind:  providerRef.Kind,
+					Ready: false,
+				})
+				allReady = false
+				continue
+			}
+			return nil, false, fmt.Errorf("failed to get GitOps provider kind=%s name=%s: %w", providerRef.Kind, providerRef.Name, err)
+		}
+
+		// Use duck-typing to get provider status
+		providerStatus, err := provider.GetGitOpsProviderStatus(obj)
+		if err != nil {
+			logger.Error(err, "Failed to get GitOps provider status using duck-typing", "name", providerRef.Name)
+			summary = append(summary, v1alpha2.ProviderStatusSummary{
+				Name:  providerRef.Name,
+				Kind:  providerRef.Kind,
+				Ready: false,
+			})
+			allReady = false
+			continue
+		}
+
+		summary = append(summary, v1alpha2.ProviderStatusSummary{
+			Name:  providerRef.Name,
+			Kind:  providerRef.Kind,
+			Ready: providerStatus.Ready,
+		})
+
+		if !providerStatus.Ready {
+			allReady = false
+		}
+	}
+
+	return summary, allReady, nil
 }
 
 // SetupWithManager sets up the controller with the Manager

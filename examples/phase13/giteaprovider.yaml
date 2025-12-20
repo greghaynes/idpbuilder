@@ -1,0 +1,24 @@
+---
+# Example GiteaProvider configuration (for completeness)
+apiVersion: idpbuilder.cnoe.io/v1alpha2
+kind: GiteaProvider
+metadata:
+  name: gitea-local
+  namespace: idpbuilder-system
+spec:
+  # Namespace where Gitea will be deployed
+  namespace: gitea
+  
+  # Version of Gitea
+  version: "1.24.3"
+  
+  # Admin user configuration
+  adminUser:
+    username: giteaAdmin
+    email: admin@cnoe.localtest.me
+    autoGenerate: true
+  
+  # Organizations to create
+  organizations:
+    - name: idpbuilder
+      description: IDP Builder Bootstrap Organization
