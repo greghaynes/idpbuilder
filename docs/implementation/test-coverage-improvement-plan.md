@@ -17,14 +17,20 @@ This document identifies modules in the idpbuilder codebase with significant fun
 
 ## Modules with Low Coverage
 
-### Critical Business Logic Modules (0% Coverage)
+### V2 Controller Architecture - Critical Modules with Low Coverage
 
-The following modules have zero test coverage but contain significant business logic:
+The following controllers from the new controller-based architecture have low test coverage:
+
+| Module | Functions | Coverage | Description |
+|--------|-----------|----------|-------------|
+| `pkg/controllers/gitopsprovider/argocdprovider_controller.go` | 7 | 0% | ArgoCD provider management (v2) |
+| `pkg/controllers/gitprovider/giteaprovider_controller.go` | ~15 | 13.8% | Gitea provider management (v2) |
+| `pkg/controllers/gatewayprovider/nginxgateway_controller.go` | ~12 | 42.4% | Nginx Gateway provider (v2) |
+
+### Other Modules with Low Coverage
 
 | Module | Functions | Description |
 |--------|-----------|-------------|
-| `pkg/controllers/localbuild/controller.go` | 23 (7.4%) | Core localbuild reconciliation logic |
-| `pkg/controllers/gitopsprovider/argocdprovider_controller.go` | 7 | ArgoCD provider management |
 | `pkg/logger/handler.go` | 11 | Custom structured logging handler |
 | `pkg/cmd/get/clusters.go` | 9 | Cluster information retrieval |
 | `pkg/cmd/create/root.go` | 7 | Cluster creation command logic |
@@ -33,12 +39,9 @@ The following modules have zero test coverage but contain significant business l
 | `pkg/cmd/version/root.go` | 4 | Version command |
 | `pkg/util/k8s.go` | 4 | Kubernetes client utilities |
 | `pkg/printer/*` | 9 | Output formatting (JSON/YAML/Table) |
-| `pkg/controllers/localbuild/argo.go` | 3 | ArgoCD installation |
-| `pkg/controllers/localbuild/gitea.go` | 3 | Gitea installation |
 | `pkg/controllers/crd.go` | 3 | CRD management |
 | `pkg/util/argocd.go` | 2 | ArgoCD utilities |
 | `pkg/util/idp.go` | 2 | IDP configuration utilities |
-| `pkg/resources/localbuild/application.go` | 2 | Argo application specs |
 
 ### Logger and Utility Modules (0-10% Coverage)
 
@@ -49,13 +52,12 @@ The following modules have zero test coverage but contain significant business l
 
 ## Recommended Testing Strategy
 
-### Group 1: Controller Tests with Fake Kubernetes Client
+### Group 1: V2 Controller Tests with Fake Kubernetes Client (HIGHEST PRIORITY)
 
 **Target Modules:**
-- `pkg/controllers/localbuild/controller.go`
-- `pkg/controllers/gitopsprovider/argocdprovider_controller.go`
-- `pkg/controllers/localbuild/argo.go`
-- `pkg/controllers/localbuild/gitea.go`
+- `pkg/controllers/gitopsprovider/argocdprovider_controller.go` (0% coverage)
+- `pkg/controllers/gitprovider/giteaprovider_controller.go` (13.8% coverage)
+- `pkg/controllers/gatewayprovider/nginxgateway_controller.go` (42.4% coverage)
 - `pkg/controllers/crd.go`
 
 **Testing Approach:**
@@ -63,43 +65,39 @@ The following modules have zero test coverage but contain significant business l
 Use the existing testing pattern found in `pkg/controllers/gatewayprovider/nginxgateway_functional_test.go` and `pkg/controllers/gitprovider/giteaprovider_controller_test.go`:
 
 ```go
-// Example test structure for LocalbuildReconciler
-func TestLocalbuildReconciler_BasicReconciliation(t *testing.T) {
+// Example test structure for ArgoCDProviderReconciler
+func TestArgoCDProviderReconciler_BasicReconciliation(t *testing.T) {
     scheme := k8s.GetScheme()
     
     // Create test resources
-    localbuild := &v1alpha1.Localbuild{
+    argocdProvider := &v1alpha2.ArgoCDProvider{
         ObjectMeta: metav1.ObjectMeta{
-            Name:      "test-localbuild",
-            Namespace: "test-namespace",
+            Name:      "test-argocd",
+            Namespace: "argocd",
         },
-        Spec: v1alpha1.LocalbuildSpec{
-            // Test spec
+        Spec: v1alpha2.ArgoCDProviderSpec{
+            Namespace: "argocd",
+            Version:   "v2.9.0",
         },
     }
     
     // Create fake client with resources
     fakeClient := fake.NewClientBuilder().
         WithScheme(scheme).
-        WithObjects(localbuild).
-        WithStatusSubresource(&v1alpha1.Localbuild{}).
+        WithObjects(argocdProvider).
+        WithStatusSubresource(&v1alpha2.ArgoCDProvider{}).
         Build()
     
-    reconciler := &LocalbuildReconciler{
+    reconciler := &ArgoCDProviderReconciler{
         Client: fakeClient,
         Scheme: scheme,
-        Config: v1alpha1.BuildCustomizationSpec{
-            Host:     "test.example.com",
-            Port:     "8443",
-            Protocol: "https",
-        },
     }
     
     // Test reconciliation
     req := ctrl.Request{
         NamespacedName: types.NamespacedName{
-            Name:      localbuild.Name,
-            Namespace: localbuild.Namespace,
+            Name:      argocdProvider.Name,
+            Namespace: argocdProvider.Namespace,
         },
     }
     
@@ -113,17 +111,7 @@ func TestLocalbuildReconciler_BasicReconciliation(t *testing.T) {
 
 **Specific Test Cases:**
 
-1. **LocalbuildReconciler Tests** (`pkg/controllers/localbuild/controller_test.go`):
-   - Test reconciliation adds finalizers
-   - Test project namespace creation
-   - Test core package installation coordination
-   - Test static password updates (ArgoCD)
-   - Test ArgoCD app reconciliation with Gitea
-   - Test shutdown behavior and cleanup
-   - Test error handling and requeue logic
-   - Test status updates (ObservedGeneration)
-
-2. **ArgoCDProviderReconciler Tests** (`pkg/controllers/gitopsprovider/argocdprovider_controller_test.go`):
+1. **ArgoCDProviderReconciler Tests** (`pkg/controllers/gitopsprovider/argocdprovider_controller_test.go`):
    - Test provider creation and initialization
    - Test ArgoCD installation via manifests
    - Test admin credential generation
@@ -131,8 +119,26 @@ func TestLocalbuildReconciler_BasicReconciliation(t *testing.T) {
    - Test namespace creation
    - Test error handling during installation
    - Test reconciliation idempotency
+   - Test finalizer handling
 
-3. **CRD Management Tests** (`pkg/controllers/crd_test.go`):
+2. **GiteaProviderReconciler Tests** (`pkg/controllers/gitprovider/giteaprovider_controller_test.go`):
+   - Expand existing tests (currently 13.8% coverage)
+   - Test Gitea installation and configuration
+   - Test admin user creation and password management
+   - Test token generation and storage
+   - Test repository initialization
+   - Test webhook configuration
+   - Test status condition updates
+
+3. **NginxGatewayReconciler Tests** (`pkg/controllers/gatewayprovider/nginxgateway_controller_test.go`):
+   - Expand existing tests (currently 42.4% coverage)
+   - Test Nginx Gateway installation
+   - Test IngressClass configuration
+   - Test TLS certificate management
+   - Test service exposure configuration
+   - Test status monitoring and updates
+
+4. **CRD Management Tests** (`pkg/controllers/crd_test.go`):
    - Test CRD existence checking
    - Test CRD installation from embedded resources
    - Test CRD update/patching
@@ -216,8 +222,8 @@ users:
    - Verify secret name, namespace, and type
 
 3. **IDP Utilities** (`pkg/util/idp_test.go`):
-   - Test `GetConfig()` with fake client and localbuild resources
-   - Test error handling when localbuild not found
+   - Test `GetConfig()` with fake client and Platform resources
+   - Test error handling when Platform resource not found
    - Test default values
 
 4. **File Utilities** (`pkg/util/files/files_test.go`):
@@ -434,9 +440,13 @@ func TestHandler_ColoredOutput(t *testing.T) {
 
 ## Implementation Priority
 
-### High Priority (Critical for Core Functionality)
-1. **Controller Tests**: LocalbuildReconciler, ArgoCDProviderReconciler, CRD management
-2. **Utility Tests**: k8s.go, argocd.go, idp.go (these are widely used)
+### High Priority (Critical for V2 Controller Architecture)
+1. **V2 Controller Tests** (HIGHEST PRIORITY):
+   - ArgoCDProviderReconciler (0% coverage)
+   - GiteaProviderReconciler (13.8% coverage - expand tests)
+   - NginxGatewayReconciler (42.4% coverage - expand tests)
+   - CRD management (0% coverage)
+2. **Utility Tests**: k8s.go, argocd.go, idp.go (these are widely used by controllers)
 
 ### Medium Priority (User-Facing Features)
 3. **Printer Tests**: All printer modules (affects CLI output)
@@ -463,7 +473,10 @@ func TestHandler_ColoredOutput(t *testing.T) {
 
 With the recommended tests implemented, we expect:
 
-- **Controllers**: 0-7% → 60-70% coverage
+- **V2 Controllers**: 
+  - ArgoCDProvider: 0% → 70-80% coverage
+  - GiteaProvider: 13.8% → 70-80% coverage
+  - NginxGateway: 42.4% → 75-85% coverage
 - **Utilities**: 0% → 80-90% coverage  
 - **Printers**: 0% → 90-95% coverage
 - **CLI Commands**: 0% → 50-60% coverage
@@ -483,13 +496,28 @@ With the recommended tests implemented, we expect:
 ```
 Package                                                           Coverage
 ================================================================================
-pkg/controllers/localbuild                                        3.9%
+V2 Controller Architecture (Focus Areas):
+pkg/controllers/gitopsprovider                                    0.0%
 pkg/controllers/gitprovider                                       13.8%
+pkg/controllers/gatewayprovider                                   42.4%
+pkg/controllers/platform                                          61.4%
+
+Other Packages:
 pkg/build                                                         25.1%
 pkg/cmd/get                                                       24.5%
 pkg/controllers/custompackage                                     58.4%
-pkg/controllers/gatewayprovider                                   42.4%
 pkg/controllers/gitrepository                                     52.4%
+pkg/k8s                                                           56.9%
+pkg/kind                                                          58.9%
+pkg/resources/gitea                                               11.4%
+pkg/util                                                          45.4%
+pkg/util/fs                                                       52.9%
+pkg/util/provider                                                 86.3%
+
+Total                                                             27.3%
+```
+
+**Note**: The `pkg/controllers/localbuild` package is being deprecated as part of the v2 controller architecture migration and is not included in this improvement plan.
 pkg/controllers/platform                                          61.4%
 pkg/k8s                                                           56.9%
 pkg/kind                                                          58.9%
