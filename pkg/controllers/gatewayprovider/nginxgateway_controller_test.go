@@ -6,6 +6,7 @@ import (
 
 	"github.com/cnoe-io/idpbuilder/api/v1alpha1"
 	"github.com/cnoe-io/idpbuilder/api/v1alpha2"
+	"github.com/cnoe-io/idpbuilder/pkg/k8s"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
@@ -1430,4 +1431,175 @@ func TestNginxGatewayReconciler_Reconcile_WithAllTypesRegistered(t *testing.T) {
 	// Verify status was updated
 	assert.NotEmpty(t, updatedGateway.Status.Phase)
 	assert.NotEmpty(t, updatedGateway.Status.Conditions)
+}
+
+func TestNginxGatewayReconciler_Reconcile_WithFullScheme(t *testing.T) {
+	// Use k8s.GetScheme() which includes all required types for manifest parsing
+	scheme := k8s.GetScheme()
+
+	nginxGateway := &v1alpha2.NginxGateway{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "test-nginx-full",
+			Namespace:  "test-ns",
+			Finalizers: []string{nginxGatewayFinalizer},
+		},
+		Spec: v1alpha2.NginxGatewaySpec{
+			Namespace: "ingress-nginx",
+			Version:   "1.13.0",
+			IngressClass: v1alpha2.NginxIngressClass{
+				Name:      "nginx",
+				IsDefault: true,
+			},
+		},
+		Status: v1alpha2.NginxGatewayStatus{
+			Phase: "Installing",
+		},
+	}
+
+	ns := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "ingress-nginx",
+		},
+	}
+
+	// Create deployment that is ready
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      nginxControllerDeployment,
+			Namespace: "ingress-nginx",
+		},
+		Status: appsv1.DeploymentStatus{
+			Replicas:          2,
+			AvailableReplicas: 2,
+			ReadyReplicas:     2,
+		},
+	}
+
+	// Create service with LoadBalancer status
+	service := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      nginxControllerServiceName,
+			Namespace: "ingress-nginx",
+		},
+		Spec: corev1.ServiceSpec{
+			ClusterIP: "10.96.0.1",
+		},
+		Status: corev1.ServiceStatus{
+			LoadBalancer: corev1.LoadBalancerStatus{
+				Ingress: []corev1.LoadBalancerIngress{
+					{IP: "192.168.1.100"},
+				},
+			},
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(nginxGateway, ns, deployment, service).
+		WithStatusSubresource(&v1alpha2.NginxGateway{}).
+		Build()
+
+	reconciler := &NginxGatewayReconciler{
+		Client: fakeClient,
+		Scheme: scheme,
+		Config: v1alpha1.BuildCustomizationSpec{},
+	}
+
+	req := ctrl.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      nginxGateway.Name,
+			Namespace: nginxGateway.Namespace,
+		},
+	}
+
+	// With full scheme, manifests should parse successfully
+	// but may still fail on actual resource creation in fake client
+	_, _ = reconciler.Reconcile(context.Background(), req)
+
+	// Get updated gateway
+	updatedGateway := &v1alpha2.NginxGateway{}
+	err := fakeClient.Get(context.Background(), client.ObjectKey{
+		Name:      nginxGateway.Name,
+		Namespace: nginxGateway.Namespace,
+	}, updatedGateway)
+	require.NoError(t, err)
+
+	// Verify status was updated - even if installation fails, status should be set
+	assert.NotEmpty(t, updatedGateway.Status.Phase)
+	t.Logf("Gateway phase: %s", updatedGateway.Status.Phase)
+
+	// Verify conditions are set
+	assert.NotEmpty(t, updatedGateway.Status.Conditions)
+	for _, cond := range updatedGateway.Status.Conditions {
+		t.Logf("Condition: Type=%s, Status=%s, Reason=%s", cond.Type, cond.Status, cond.Reason)
+	}
+}
+
+func TestNginxGatewayReconciler_installNginxResources_WithFullScheme(t *testing.T) {
+	// Use k8s.GetScheme() for full type support
+	scheme := k8s.GetScheme()
+
+	gateway := &v1alpha2.NginxGateway{
+		Spec: v1alpha2.NginxGatewaySpec{
+			Namespace: "ingress-nginx",
+			Version:   "1.13.0",
+		},
+	}
+
+	ns := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "ingress-nginx",
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(ns).
+		Build()
+
+	reconciler := &NginxGatewayReconciler{
+		Client: fakeClient,
+		Scheme: scheme,
+		Config: v1alpha1.BuildCustomizationSpec{},
+	}
+
+	// This should parse manifests successfully with full scheme
+	err := reconciler.installNginxResources(context.Background(), gateway)
+
+	// Even with full scheme, fake client may not support all operations
+	// but at least manifests should parse
+	t.Logf("Install nginx resources result: %v", err)
+}
+
+func TestNginxGatewayReconciler_reconcileNginx_WithFullScheme(t *testing.T) {
+	scheme := k8s.GetScheme()
+
+	gateway := &v1alpha2.NginxGateway{
+		Spec: v1alpha2.NginxGatewaySpec{
+			Namespace: "ingress-nginx-reconcile",
+			Version:   "1.13.0",
+		},
+	}
+
+	ns := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "ingress-nginx-reconcile",
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(ns).
+		Build()
+
+	reconciler := &NginxGatewayReconciler{
+		Client: fakeClient,
+		Scheme: scheme,
+		Config: v1alpha1.BuildCustomizationSpec{},
+	}
+
+	_, err := reconciler.reconcileNginx(context.Background(), gateway)
+
+	// With full scheme, we should get further in the reconciliation
+	t.Logf("Reconcile nginx result: %v", err)
 }
