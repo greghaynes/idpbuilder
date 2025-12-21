@@ -423,15 +423,7 @@ func (r *GiteaProviderReconciler) isNginxAdmissionWebhookReady(ctx context.Conte
 	logger := log.FromContext(ctx)
 
 	// Check if the nginx admission webhook service exists
-	serviceGVK := schema.GroupVersionKind{
-		Group:   "",
-		Version: "v1",
-		Kind:    "Service",
-	}
-
-	service := &unstructured.Unstructured{}
-	service.SetGroupVersionKind(serviceGVK)
-
+	service := &corev1.Service{}
 	err := r.Get(ctx, types.NamespacedName{
 		Namespace: nginxNamespace,
 		Name:      nginxAdmissionWebhookServiceName,
@@ -446,15 +438,7 @@ func (r *GiteaProviderReconciler) isNginxAdmissionWebhookReady(ctx context.Conte
 	}
 
 	// Check if the service has endpoints (meaning the webhook pod is ready)
-	endpointsGVK := schema.GroupVersionKind{
-		Group:   "",
-		Version: "v1",
-		Kind:    "Endpoints",
-	}
-
-	endpoints := &unstructured.Unstructured{}
-	endpoints.SetGroupVersionKind(endpointsGVK)
-
+	endpoints := &corev1.Endpoints{}
 	err = r.Get(ctx, types.NamespacedName{
 		Namespace: nginxNamespace,
 		Name:      nginxAdmissionWebhookServiceName,
@@ -469,22 +453,15 @@ func (r *GiteaProviderReconciler) isNginxAdmissionWebhookReady(ctx context.Conte
 	}
 
 	// Check if endpoints has at least one ready address
-	subsets, found, err := unstructured.NestedSlice(endpoints.Object, "subsets")
-	if err != nil || !found || len(subsets) == 0 {
+	if len(endpoints.Subsets) == 0 {
 		logger.V(1).Info("Nginx admission webhook has no endpoint subsets")
 		return false, nil
 	}
 
 	// Check each subset for ready addresses
-	for _, subset := range subsets {
-		subsetMap, ok := subset.(map[string]interface{})
-		if !ok {
-			continue
-		}
-
-		addresses, found, err := unstructured.NestedSlice(subsetMap, "addresses")
-		if err == nil && found && len(addresses) > 0 {
-			logger.V(1).Info("Nginx admission webhook is ready", "readyAddresses", len(addresses))
+	for _, subset := range endpoints.Subsets {
+		if len(subset.Addresses) > 0 {
+			logger.V(1).Info("Nginx admission webhook is ready", "readyAddresses", len(subset.Addresses))
 			return true, nil
 		}
 	}
