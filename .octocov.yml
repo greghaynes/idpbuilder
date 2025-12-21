@@ -1,0 +1,19 @@
+# octocov configuration for test coverage reporting
+coverage:
+  paths:
+    - cover.out
+  
+comment:
+  if: is_pull_request
+  hideFooterLink: false
+  
+diff:
+  datastores:
+    - artifact://${GITHUB_REPOSITORY}
+
+codeToTestRatio:
+  code:
+    - '**/*.go'
+    - '!**/*_test.go'
+  test:
+    - '**/*_test.go'
