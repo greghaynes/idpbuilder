@@ -190,7 +190,7 @@ func (r *Reporter) UpdateSubStep(parentName, subStepName string, state int) {
 // render updates the display with current status
 func (r *Reporter) render() {
 	isTerminal := r.isTerminal()
-	
+
 	// In simple mode, only output on state changes, no inline updates
 	if r.simpleMode {
 		output := r.buildSimpleOutput()
@@ -246,7 +246,7 @@ func (r *Reporter) buildOutput() string {
 		// Add separator after current running step
 		if i == r.currentIdx && step.State == StateRunning {
 			output += fmt.Sprintf("  %s│%s\n", r.color(Blue), r.color(Reset))
-			
+
 			// Show sub-steps if any
 			if len(step.SubSteps) > 0 {
 				for _, subStep := range step.SubSteps {
@@ -274,7 +274,7 @@ func (r *Reporter) buildSimpleOutput() string {
 		step := r.steps[r.currentIdx]
 		symbol := r.getSymbol(step.State)
 		color := r.getColor(step.State)
-		
+
 		status := ""
 		if step.State == StateRunning {
 			status = "..."
@@ -284,7 +284,7 @@ func (r *Reporter) buildSimpleOutput() string {
 		} else if step.State == StateFailed {
 			status = " (failed)"
 		}
-		
+
 		return fmt.Sprintf("%s%s%s %s%s\n",
 			r.color(color),
 			symbol,

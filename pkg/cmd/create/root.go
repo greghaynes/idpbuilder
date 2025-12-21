@@ -102,7 +102,7 @@ func init() {
 	CreateCmd.Flags().StringSliceVarP(&packageCustomizationFiles, "package-custom-file", "c", []string{}, packageCustomizationFilesUsage)
 	// idpbuilder related flags
 	CreateCmd.Flags().BoolVarP(&noExit, "no-exit", "n", true, noExitUsage)
-	
+
 	// status and output related flags
 	CreateCmd.Flags().StringVar(&statusOutput, "status-output", "auto", statusOutputUsage)
 	CreateCmd.Flags().BoolVar(&noColor, "no-color", false, noColorUsage)

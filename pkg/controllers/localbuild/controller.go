@@ -159,7 +159,7 @@ func (r *LocalbuildReconciler) installCorePackages(ctx context.Context, req ctrl
 		// NOTE: Gitea removed - now managed by GiteaProvider controller
 	}
 	logger.V(1).Info("installing core packages")
-	
+
 	// Add sub-steps for each package only once
 	r.mu.Lock()
 	shouldAddSubSteps := !r.subStepsInitialized
@@ -167,7 +167,7 @@ func (r *LocalbuildReconciler) installCorePackages(ctx context.Context, req ctrl
 		r.subStepsInitialized = true
 	}
 	r.mu.Unlock()
-	
+
 	if shouldAddSubSteps && r.StatusReporter != nil {
 		for name := range installers {
 			r.StatusReporter.AddSubStep("packages", name, name)
@@ -186,19 +186,19 @@ func (r *LocalbuildReconciler) installCorePackages(ctx context.Context, req ctrl
 			r.StatusReporter.AddSubStep("packages", name, resource.Spec.PackageConfigs.CustomPackageUrls[i])
 		}
 	}
-	
+
 	for k, v := range installers {
 		wg.Add(1)
 		name := k
 		inst := v
 		go func() {
 			defer wg.Done()
-			
+
 			// Mark as running
 			if r.StatusReporter != nil {
 				r.StatusReporter.UpdateSubStep("packages", name, 1) // StateRunning = 1
 			}
-			
+
 			_, iErr := inst(ctx, req, resource)
 			if iErr != nil {
 				logger.V(1).Info("failed installing", "name", name, "error", iErr)
@@ -281,7 +281,7 @@ func (r *LocalbuildReconciler) ReconcileArgoAppsWithGitea(ctx context.Context, r
 	// NOTE: Gitea removed - now managed by GiteaProvider controller, not as an ArgoCD app
 	// NOTE: IngressNginx removed - now managed by NginxGateway controller (v2)
 	bootStrapApps := []string{v1alpha1.ArgoCDPackageName}
-	
+
 	for _, n := range bootStrapApps {
 		result, err := r.reconcileEmbeddedApp(ctx, n, resource)
 		if err != nil {
