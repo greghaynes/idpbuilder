@@ -355,6 +355,11 @@ examples.forEach(example => {
         path.join(__dirname, '..', 'site/docs/examples/v1alpha2') :
         path.join(__dirname, '..', 'site/docs/examples');
     
+    // Ensure output directory exists
+    if (!fs.existsSync(outputDir)) {
+        fs.mkdirSync(outputDir, { recursive: true });
+    }
+    
     const outputPath = path.join(outputDir, example.filename);
     fs.writeFileSync(outputPath, html);
     console.log(`Generated: ${outputPath}`);
