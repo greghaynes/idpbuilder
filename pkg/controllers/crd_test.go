@@ -506,7 +506,7 @@ func TestEnsureCRD_MetadataLabelsAnnotations(t *testing.T) {
 	}
 	crd.Annotations = map[string]string{
 		"controller-gen.kubebuilder.io/version": "v0.20.0",
-		"description":                            "Test CRD",
+		"description":                           "Test CRD",
 	}
 
 	err = EnsureCRD(ctx, scheme, mockClient, crd)
@@ -641,7 +641,7 @@ func TestEnsureCRDs(t *testing.T) {
 			listErr := mockClient.List(ctx, crdList)
 			require.NoError(t, listErr)
 			t.Logf("EnsureCRDs created %d CRDs from embedded resources", len(crdList.Items))
-			
+
 			// Verify each CRD was actually loaded
 			for _, crd := range crdList.Items {
 				t.Logf("  - CRD: %s", crd.Name)
