@@ -409,8 +409,8 @@ func TestNginxGatewayReconciler_Reconcile_StatusPhaseTransition(t *testing.T) {
 
 	nginxGateway := &v1alpha2.NginxGateway{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-nginx",
-			Namespace: "test-ns",
+			Name:       "test-nginx",
+			Namespace:  "test-ns",
 			Finalizers: []string{nginxGatewayFinalizer},
 		},
 		Spec: v1alpha2.NginxGatewaySpec{
@@ -742,9 +742,9 @@ func TestNginxGatewayReconciler_Reconcile_DefaultIngressClass(t *testing.T) {
 	_ = appsv1.AddToScheme(scheme)
 
 	tests := []struct {
-		name                   string
-		ingressClass           v1alpha2.NginxIngressClass
-		expectedIngressClass   string
+		name                 string
+		ingressClass         v1alpha2.NginxIngressClass
+		expectedIngressClass string
 	}{
 		{
 			name: "custom ingress class name",
@@ -878,9 +878,9 @@ func TestNginxGatewayReconciler_reconcileNginx(t *testing.T) {
 	_ = appsv1.AddToScheme(scheme)
 
 	tests := []struct {
-		name          string
-		namespace     *corev1.Namespace
-		expectError   bool
+		name        string
+		namespace   *corev1.Namespace
+		expectError bool
 	}{
 		{
 			name: "namespace exists",
