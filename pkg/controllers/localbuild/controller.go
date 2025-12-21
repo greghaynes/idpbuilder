@@ -57,6 +57,8 @@ const (
 var (
 	// errGiteaProviderNotReady is returned when the GiteaProvider is not yet ready
 	errGiteaProviderNotReady = errors.New("GiteaProvider is not ready yet")
+	// errGiteaInstallTimeout is returned when the GiteaProvider installation times out
+	errGiteaInstallTimeout = errors.New("Gitea installation timed out")
 )
 
 type ArgocdSession struct {
@@ -268,7 +270,7 @@ func (r *LocalbuildReconciler) trackGiteaInstallation(ctx context.Context, resou
 			logger.V(1).Info("Context cancelled while tracking gitea installation")
 			return
 		case <-timeout:
-			logger.Error(fmt.Errorf("timeout"), "Gitea installation timed out")
+			logger.Error(errGiteaInstallTimeout, "Gitea installation timed out")
 			if r.StatusReporter != nil {
 				r.StatusReporter.UpdateSubStep("packages", v1alpha1.GiteaPackageName, 3) // StateFailed = 3
 			}
