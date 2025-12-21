@@ -657,6 +657,21 @@ func (r *LocalbuildReconciler) reconcileCustomPkgFile(ctx context.Context, resou
 	return ctrl.Result{}, nil
 }
 
+func validateGitURL(url, fieldName string) error {
+	if url == "" {
+		return fmt.Errorf("%s is not set", fieldName)
+	}
+	// Validate URL format - must match the GitRepository CRD validation pattern: ^https?:\/\/.+$
+	if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
+		return fmt.Errorf("%s must start with http:// or https://, got: %s", fieldName, url)
+	}
+	// Check that there's content after the protocol (e.g., not just "http://" or "https://")
+	if url == "http://" || url == "https://" {
+		return fmt.Errorf("%s is too short: %s", fieldName, url)
+	}
+	return nil
+}
+
 func (r *LocalbuildReconciler) reconcileGitRepo(ctx context.Context, resource *v1alpha1.Localbuild, repoType, repoName, embeddedName, absPath string) (*v1alpha1.GitRepository, error) {
 	logger := log.FromContext(ctx)
 
@@ -694,28 +709,11 @@ func (r *LocalbuildReconciler) reconcileGitRepo(ctx context.Context, resource *v
 	}
 
 	// Validate that we have the required URLs and they match the expected pattern
-	if gitProviderStatus.Endpoint == "" {
-		return nil, fmt.Errorf("GiteaProvider endpoint is not set")
+	if err := validateGitURL(gitProviderStatus.Endpoint, "GiteaProvider endpoint"); err != nil {
+		return nil, err
 	}
-	// Validate URL format - must match the GitRepository CRD validation pattern: ^https?:\/\/.+$
-	if !strings.HasPrefix(gitProviderStatus.Endpoint, "http://") && !strings.HasPrefix(gitProviderStatus.Endpoint, "https://") {
-		return nil, fmt.Errorf("GiteaProvider endpoint must start with http:// or https://, got: %s", gitProviderStatus.Endpoint)
-	}
-	// Check that there's content after the protocol (e.g., not just "http://" or "https://")
-	if gitProviderStatus.Endpoint == "http://" || gitProviderStatus.Endpoint == "https://" {
-		return nil, fmt.Errorf("GiteaProvider endpoint is too short: %s", gitProviderStatus.Endpoint)
-	}
-
-	if gitProviderStatus.InternalEndpoint == "" {
-		return nil, fmt.Errorf("GiteaProvider internal endpoint is not set")
-	}
-	// Validate internal URL format
-	if !strings.HasPrefix(gitProviderStatus.InternalEndpoint, "http://") && !strings.HasPrefix(gitProviderStatus.InternalEndpoint, "https://") {
-		return nil, fmt.Errorf("GiteaProvider internal endpoint must start with http:// or https://, got: %s", gitProviderStatus.InternalEndpoint)
-	}
-	// Check that there's content after the protocol
-	if gitProviderStatus.InternalEndpoint == "http://" || gitProviderStatus.InternalEndpoint == "https://" {
-		return nil, fmt.Errorf("GiteaProvider internal endpoint is too short: %s", gitProviderStatus.InternalEndpoint)
+	if err := validateGitURL(gitProviderStatus.InternalEndpoint, "GiteaProvider internal endpoint"); err != nil {
+		return nil, err
 	}
 
 	repo := &v1alpha1.GitRepository{

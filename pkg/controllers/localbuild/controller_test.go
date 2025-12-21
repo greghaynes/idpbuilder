@@ -14,6 +14,71 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
+func TestValidateGitURL(t *testing.T) {
+	tests := []struct {
+		name          string
+		url           string
+		fieldName     string
+		expectError   bool
+		errorContains string
+	}{
+		{
+			name:        "valid http URL",
+			url:         "http://example.com",
+			fieldName:   "test field",
+			expectError: false,
+		},
+		{
+			name:        "valid https URL",
+			url:         "https://example.com:8443",
+			fieldName:   "test field",
+			expectError: false,
+		},
+		{
+			name:          "empty URL",
+			url:           "",
+			fieldName:     "test field",
+			expectError:   true,
+			errorContains: "is not set",
+		},
+		{
+			name:          "missing protocol",
+			url:           "example.com",
+			fieldName:     "test field",
+			expectError:   true,
+			errorContains: "must start with http:// or https://",
+		},
+		{
+			name:          "http only",
+			url:           "http://",
+			fieldName:     "test field",
+			expectError:   true,
+			errorContains: "is too short",
+		},
+		{
+			name:          "https only",
+			url:           "https://",
+			fieldName:     "test field",
+			expectError:   true,
+			errorContains: "is too short",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateGitURL(tt.url, tt.fieldName)
+			if tt.expectError {
+				assert.Error(t, err)
+				if tt.errorContains != "" {
+					assert.Contains(t, err.Error(), tt.errorContains)
+				}
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
 func TestReconcileGitRepoValidation(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = v1alpha1.AddToScheme(scheme)
