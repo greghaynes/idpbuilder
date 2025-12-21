@@ -548,7 +548,7 @@ func TestGiteaProviderReconciler_CreateAdminSecret(t *testing.T) {
 				Namespace: secret.Namespace,
 			}, retrievedSecret)
 			require.NoError(t, err)
-			
+
 			// Fake client doesn't convert StringData to Data, so check StringData
 			assert.Equal(t, tt.expectedUsername, retrievedSecret.StringData["username"])
 			assert.NotEmpty(t, retrievedSecret.StringData["password"])
@@ -881,7 +881,7 @@ func TestGiteaProviderReconciler_HandleDeletionRemovesFinalizer(t *testing.T) {
 		Name:      provider.Name,
 		Namespace: provider.Namespace,
 	}, updatedProvider)
-	
+
 	// Finalizer should be removed
 	if err == nil {
 		assert.NotContains(t, updatedProvider.Finalizers, giteaProviderFinalizer)
@@ -974,10 +974,10 @@ func TestGiteaProviderReconciler_PasswordGeneration(t *testing.T) {
 	require.NoError(t, err)
 
 	password := retrievedSecret.StringData["password"]
-	
+
 	// Verify password is not empty
 	assert.NotEmpty(t, password)
-	
+
 	// Verify password has reasonable length (should be 40+ chars based on GeneratePassword)
 	assert.Greater(t, len(password), 30)
 }
@@ -1166,12 +1166,12 @@ func TestGiteaProviderReconciler_NginxWebhookNotReadyRequeues(t *testing.T) {
 
 	// Call reconcileGitea - should requeue when nginx webhook not ready
 	result, err := reconciler.reconcileGitea(context.Background(), provider)
-	
+
 	// Error or requeue is expected
 	if err != nil {
 		t.Logf("reconcileGitea error (expected): %v", err)
 	}
-	
+
 	// Should requeue
 	assert.Equal(t, defaultRequeueTime, result.RequeueAfter)
 }
@@ -1223,7 +1223,7 @@ func TestGiteaProviderReconciler_AdminUsernameDefaulting(t *testing.T) {
 
 			_, err := reconciler.createAdminSecretIfNotExists(context.Background(), provider)
 			require.NoError(t, err)
-			
+
 			// Retrieve the secret - fake client keeps StringData
 			retrievedSecret := &corev1.Secret{}
 			err = fakeClient.Get(context.Background(), types.NamespacedName{
@@ -1231,7 +1231,7 @@ func TestGiteaProviderReconciler_AdminUsernameDefaulting(t *testing.T) {
 				Namespace: "gitea",
 			}, retrievedSecret)
 			require.NoError(t, err)
-			
+
 			assert.Equal(t, tt.expectedUsername, retrievedSecret.StringData["username"])
 		})
 	}
@@ -1265,7 +1265,7 @@ func TestGiteaProviderReconciler_UsePathRouting(t *testing.T) {
 
 			reconciler := &GiteaProviderReconciler{}
 			config := reconciler.buildConfigFromSpec(provider)
-			
+
 			assert.Equal(t, tt.usePathRouting, config.UsePathRouting)
 		})
 	}
@@ -1320,12 +1320,12 @@ func TestGiteaProviderReconciler_ReconcileWithNginxWebhookReady(t *testing.T) {
 
 	// Call reconcileGitea - should proceed past nginx webhook check
 	result, err := reconciler.reconcileGitea(context.Background(), provider)
-	
+
 	// Will error on manifest installation, but should not requeue for nginx webhook
 	if err != nil {
 		t.Logf("Expected error during installation: %v", err)
 	}
-	
+
 	// Should not be requeuing for nginx webhook (would have empty RequeueAfter)
 	assert.NotEqual(t, defaultRequeueTime, result.RequeueAfter, "Should not requeue for nginx webhook when it's ready")
 }
@@ -1375,7 +1375,7 @@ func TestGiteaProviderReconciler_DeploymentWithPositiveReplicas(t *testing.T) {
 
 	// This will check deployment readiness
 	ready, err := reconciler.isGiteaReady(context.Background(), provider)
-	
+
 	// Will not be ready because API endpoint is not accessible
 	// but deployment check passes
 	if err != nil {
@@ -1501,7 +1501,7 @@ func TestGiteaProviderReconciler_VersionInStatus(t *testing.T) {
 			// Get updated provider
 			updatedProvider := &v1alpha2.GiteaProvider{}
 			_ = fakeClient.Get(context.Background(), req.NamespacedName, updatedProvider)
-			
+
 			// Version should be set in status (if reconciliation got that far)
 			if updatedProvider.Status.Version != "" {
 				assert.Equal(t, tt.expectedVersion, updatedProvider.Status.Version)
@@ -1547,7 +1547,7 @@ func TestGiteaProviderReconciler_AdminSecretExistsWithData(t *testing.T) {
 
 	secret, err := reconciler.createAdminSecretIfNotExists(context.Background(), provider)
 	require.NoError(t, err)
-	
+
 	// Should return existing secret
 	assert.Equal(t, "existinguser", string(secret.Data["username"]))
 	assert.Equal(t, "existingpass", string(secret.Data["password"]))
@@ -1586,7 +1586,7 @@ func TestGiteaProviderReconciler_ProtocolDefaults(t *testing.T) {
 
 			reconciler := &GiteaProviderReconciler{}
 			config := reconciler.buildConfigFromSpec(provider)
-			
+
 			assert.Equal(t, tt.expectedProtocol, config.Protocol)
 		})
 	}
@@ -1644,7 +1644,7 @@ func TestGiteaProviderReconciler_IngressHostDefaulting(t *testing.T) {
 
 	reconciler := &GiteaProviderReconciler{}
 	config := reconciler.buildConfigFromSpec(provider)
-	
+
 	// IngressHost should default to Host
 	assert.Equal(t, "custom.example.com", config.IngressHost)
 	assert.Equal(t, "custom.example.com", config.Host)
@@ -1684,7 +1684,7 @@ func TestGiteaProviderReconciler_ReconcileWithExistingNamespace(t *testing.T) {
 
 	// Call reconcileGitea - should handle existing namespace gracefully
 	_, err := reconciler.reconcileGitea(context.Background(), provider)
-	
+
 	// Will error on installation but namespace handling should work
 	if err != nil {
 		t.Logf("Expected error: %v", err)
@@ -1874,7 +1874,7 @@ func TestGiteaProviderReconciler_ReconcileErrorSetsFailedPhase(t *testing.T) {
 	if updatedProvider.Status.Phase == "Failed" {
 		assert.Equal(t, "Failed", updatedProvider.Status.Phase)
 	}
-	
+
 	// Should have Ready condition with False status
 	var readyCondition *metav1.Condition
 	for i := range updatedProvider.Status.Conditions {
@@ -1883,7 +1883,7 @@ func TestGiteaProviderReconciler_ReconcileErrorSetsFailedPhase(t *testing.T) {
 			break
 		}
 	}
-	
+
 	if readyCondition != nil {
 		assert.Equal(t, metav1.ConditionFalse, readyCondition.Status)
 	}
@@ -1948,7 +1948,7 @@ func TestGiteaProviderReconciler_ReconcileRequeueAfterInstalling(t *testing.T) {
 
 	// Reconcile
 	result, err := reconciler.Reconcile(context.Background(), req)
-	
+
 	// May return error or requeue
 	if err == nil && result.RequeueAfter > 0 {
 		t.Logf("Requeue after: %v", result.RequeueAfter)
@@ -1960,7 +1960,7 @@ func TestGiteaProviderReconciler_ReconcileRequeueAfterInstalling(t *testing.T) {
 	updatedProvider := &v1alpha2.GiteaProvider{}
 	err = fakeClient.Get(context.Background(), req.NamespacedName, updatedProvider)
 	require.NoError(t, err)
-	
+
 	// Phase should still be Installing or Failed
 	assert.NotEmpty(t, updatedProvider.Status.Phase)
 }
@@ -1993,7 +1993,7 @@ func TestGiteaProviderReconciler_PortDefaults(t *testing.T) {
 
 			reconciler := &GiteaProviderReconciler{}
 			config := reconciler.buildConfigFromSpec(provider)
-			
+
 			assert.Equal(t, tt.expectedPort, config.Port)
 		})
 	}
@@ -2027,7 +2027,7 @@ func TestGiteaProviderReconciler_HostDefaults(t *testing.T) {
 
 			reconciler := &GiteaProviderReconciler{}
 			config := reconciler.buildConfigFromSpec(provider)
-			
+
 			assert.Equal(t, tt.expectedHost, config.Host)
 		})
 	}
