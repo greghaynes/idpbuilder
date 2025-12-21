@@ -43,6 +43,14 @@ type Step struct {
 	State       State
 	StartTime   time.Time
 	EndTime     time.Time
+	SubSteps    []SubStep
+}
+
+// SubStep represents a sub-task within a step
+type SubStep struct {
+	Name        string
+	Description string
+	State       State
 }
 
 // Reporter provides inline status reporting for CLI operations
@@ -133,6 +141,42 @@ func (r *Reporter) FailStep(name string, err error) {
 	}
 }
 
+// AddSubStep adds a sub-step to a parent step
+func (r *Reporter) AddSubStep(parentName, subStepName, description string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	for i := range r.steps {
+		if r.steps[i].Name == parentName {
+			r.steps[i].SubSteps = append(r.steps[i].SubSteps, SubStep{
+				Name:        subStepName,
+				Description: description,
+				State:       StatePending,
+			})
+			r.render()
+			return
+		}
+	}
+}
+
+// UpdateSubStep updates the state of a sub-step
+func (r *Reporter) UpdateSubStep(parentName, subStepName string, state int) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	for i := range r.steps {
+		if r.steps[i].Name == parentName {
+			for j := range r.steps[i].SubSteps {
+				if r.steps[i].SubSteps[j].Name == subStepName {
+					r.steps[i].SubSteps[j].State = State(state)
+					r.render()
+					return
+				}
+			}
+		}
+	}
+}
+
 // render updates the display with current status
 func (r *Reporter) render() {
 	isTerminal := r.isTerminal()
@@ -192,6 +236,21 @@ func (r *Reporter) buildOutput() string {
 		// Add separator after current running step
 		if i == r.currentIdx && step.State == StateRunning {
 			output += fmt.Sprintf("  %s│%s\n", r.color(Blue), r.color(Reset))
+			
+			// Show sub-steps if any
+			if len(step.SubSteps) > 0 {
+				for _, subStep := range step.SubSteps {
+					subSymbol := r.getSymbol(subStep.State)
+					subColor := r.getColor(subStep.State)
+					output += fmt.Sprintf("  %s│%s   %s%s%s %s\n",
+						r.color(Blue),
+						r.color(Reset),
+						r.color(subColor),
+						subSymbol,
+						r.color(Reset),
+						subStep.Description)
+				}
+			}
 		}
 	}
 

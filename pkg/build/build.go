@@ -136,7 +136,7 @@ func (b *Build) ReconcileCRDs(ctx context.Context, kubeClient client.Client) err
 }
 
 func (b *Build) RunControllers(ctx context.Context, mgr manager.Manager, exitCh chan error, tmpDir string) error {
-	return controllers.RunControllers(ctx, mgr, exitCh, b.CancelFunc, b.exitOnSync, b.cfg, tmpDir)
+	return controllers.RunControllers(ctx, mgr, exitCh, b.CancelFunc, b.exitOnSync, b.cfg, tmpDir, b.statusReporter)
 }
 
 func (b *Build) isCompatible(ctx context.Context, kubeClient client.Client) (bool, error) {
