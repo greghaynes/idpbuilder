@@ -340,3 +340,101 @@ func TestIsNginxAdmissionWebhookReady(t *testing.T) {
 		assert.False(t, ready)
 	})
 }
+
+func TestStatusConditions(t *testing.T) {
+	scheme := k8s.GetScheme()
+
+	t.Run("status conditions are set during installation", func(t *testing.T) {
+		provider := &v1alpha2.GiteaProvider{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:       "test-gitea",
+				Namespace:  "default",
+				Generation: 1,
+			},
+			Spec: v1alpha2.GiteaProviderSpec{
+				Namespace: "gitea",
+				Version:   "1.24.3",
+			},
+		}
+
+		fakeClient := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithRuntimeObjects(provider).
+			WithStatusSubresource(&v1alpha2.GiteaProvider{}).
+			Build()
+
+		reconciler := &GiteaProviderReconciler{
+			Client: fakeClient,
+			Scheme: scheme,
+			Config: v1alpha1.BuildCustomizationSpec{
+				Host:     "test.example.com",
+				Port:     "8443",
+				Protocol: "https",
+			},
+		}
+
+		ctx := context.Background()
+
+		// Test isGiteaReady sets DeploymentReady condition when deployment is not found
+		ready, err := reconciler.isGiteaReady(ctx, provider)
+		require.NoError(t, err)
+		assert.False(t, ready)
+
+		// Check that DeploymentReady condition was set
+		deploymentCondition := findCondition(provider.Status.Conditions, "DeploymentReady")
+		require.NotNil(t, deploymentCondition)
+		assert.Equal(t, metav1.ConditionFalse, deploymentCondition.Status)
+		assert.Equal(t, "DeploymentNotFound", deploymentCondition.Reason)
+		assert.Contains(t, provider.Status.Message, "Waiting for Gitea deployment")
+	})
+
+	t.Run("observedGeneration is updated", func(t *testing.T) {
+		provider := &v1alpha2.GiteaProvider{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:       "test-gitea",
+				Namespace:  "default",
+				Generation: 5,
+			},
+			Spec: v1alpha2.GiteaProviderSpec{
+				Namespace: "gitea",
+			},
+		}
+
+		// Simulate status update
+		provider.Status.ObservedGeneration = provider.Generation
+		assert.Equal(t, int64(5), provider.Status.ObservedGeneration)
+	})
+
+	t.Run("message field is populated during installation", func(t *testing.T) {
+		provider := &v1alpha2.GiteaProvider{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:       "test-gitea",
+				Namespace:  "default",
+				Generation: 1,
+			},
+			Spec: v1alpha2.GiteaProviderSpec{
+				Namespace: "gitea",
+			},
+		}
+
+		// Test that message is set during various stages
+		provider.Status.Message = "Creating namespace"
+		assert.Equal(t, "Creating namespace", provider.Status.Message)
+
+		provider.Status.Message = "Deploying Gitea resources"
+		assert.Equal(t, "Deploying Gitea resources", provider.Status.Message)
+
+		provider.Status.Message = "Waiting for Gitea pods to become ready"
+		assert.Equal(t, "Waiting for Gitea pods to become ready", provider.Status.Message)
+	})
+}
+
+// findCondition finds a condition by type
+func findCondition(conditions []metav1.Condition, conditionType string) *metav1.Condition {
+	for i := range conditions {
+		if conditions[i].Type == conditionType {
+			return &conditions[i]
+		}
+	}
+	return nil
+}

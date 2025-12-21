@@ -96,6 +96,12 @@ type SecretReference struct {
 // GiteaProviderStatus defines the observed state of GiteaProvider
 type GiteaProviderStatus struct {
 	// Conditions represent the latest available observations of the GiteaProvider's state
+	// Supported condition types:
+	// - Ready: Overall readiness of the Gitea provider
+	// - NamespaceReady: Gitea namespace is created
+	// - ResourcesDeployed: Gitea resources have been deployed
+	// - DeploymentReady: Gitea deployment is running and available
+	// - APIAccessible: Gitea API endpoint is accessible
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
@@ -129,6 +135,14 @@ type GiteaProviderStatus struct {
 	// AdminUser contains information about the admin user
 	// +optional
 	AdminUser GiteaAdminUserStatus `json:"adminUser,omitempty"`
+
+	// Message provides a human-readable description of the current state
+	// +optional
+	Message string `json:"message,omitempty"`
+
+	// ObservedGeneration reflects the generation of the most recently observed GiteaProvider
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 }
 
 // GiteaAdminUserStatus contains status information about the Gitea admin user

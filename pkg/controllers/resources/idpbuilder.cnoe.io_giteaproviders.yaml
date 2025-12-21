@@ -159,8 +159,14 @@ spec:
                     type: string
                 type: object
               conditions:
-                description: Conditions represent the latest available observations
-                  of the GiteaProvider's state
+                description: |-
+                  Conditions represent the latest available observations of the GiteaProvider's state
+                  Supported condition types:
+                  - Ready: Overall readiness of the Gitea provider
+                  - NamespaceReady: Gitea namespace is created
+                  - ResourcesDeployed: Gitea resources have been deployed
+                  - DeploymentReady: Gitea deployment is running and available
+                  - APIAccessible: Gitea API endpoint is accessible
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -248,6 +254,15 @@ spec:
                   InternalEndpoint is the cluster-internal URL for Gitea API access
                   This is a duck-typed field that all Git providers must expose
                 type: string
+              message:
+                description: Message provides a human-readable description of the
+                  current state
+                type: string
+              observedGeneration:
+                description: ObservedGeneration reflects the generation of the most
+                  recently observed GiteaProvider
+                format: int64
+                type: integer
               phase:
                 description: Phase represents the current phase of the Gitea provider
                   (e.g., Pending, Installing, Ready, Failed)

@@ -87,6 +87,8 @@ func (r *GiteaProviderReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	// Update phase to Installing if not set
 	if provider.Status.Phase == "" {
 		provider.Status.Phase = "Installing"
+		provider.Status.Message = "Starting Gitea installation"
+		provider.Status.ObservedGeneration = provider.Generation
 		if err := r.Status().Update(ctx, provider); err != nil {
 			// Conflict errors are expected when the resource is updated by another process
 			// Return the error to trigger a retry without logging it as a failure
@@ -108,6 +110,8 @@ func (r *GiteaProviderReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 			Message: err.Error(),
 		})
 		provider.Status.Phase = "Failed"
+		provider.Status.Message = fmt.Sprintf("Installation failed: %v", err)
+		provider.Status.ObservedGeneration = provider.Generation
 		if statusErr := r.Status().Update(ctx, provider); statusErr != nil {
 			// Don't log conflict errors as failures - they will be retried automatically
 			if !errors.IsConflict(statusErr) {
@@ -133,6 +137,7 @@ func (r *GiteaProviderReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 			Message: "Gitea installation in progress",
 		})
 		provider.Status.Phase = "Installing"
+		provider.Status.ObservedGeneration = provider.Generation
 		if err := r.Status().Update(ctx, provider); err != nil {
 			// Conflict errors are expected when the resource is updated by another process
 			// Return the error to trigger a retry without logging it as a failure
@@ -150,6 +155,7 @@ func (r *GiteaProviderReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	internalUrl := fmt.Sprintf("http://my-gitea-http.%s.svc.cluster.local:3000", provider.Spec.Namespace)
 
 	// Ensure admin secret and token
+	provider.Status.Message = "Creating admin token"
 	secret, err := r.ensureAdminSecret(ctx, provider)
 	if err != nil {
 		return ctrl.Result{}, err
@@ -166,6 +172,8 @@ func (r *GiteaProviderReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	provider.Status.Installed = true
 	provider.Status.Version = provider.Spec.Version
 	provider.Status.Phase = "Ready"
+	provider.Status.Message = "Gitea is ready and accessible"
+	provider.Status.ObservedGeneration = provider.Generation
 	provider.Status.AdminUser.Username = provider.Spec.AdminUser.Username
 	if provider.Status.AdminUser.Username == "" {
 		provider.Status.AdminUser.Username = "giteaAdmin"
@@ -202,12 +210,27 @@ func (r *GiteaProviderReconciler) reconcileGitea(ctx context.Context, provider *
 	logger := log.FromContext(ctx)
 
 	// Ensure namespace exists
+	provider.Status.Message = "Creating namespace"
 	if err := k8s.EnsureNamespace(ctx, r.Client, provider.Spec.Namespace); err != nil {
+		meta.SetStatusCondition(&provider.Status.Conditions, metav1.Condition{
+			Type:    "NamespaceReady",
+			Status:  metav1.ConditionFalse,
+			Reason:  "NamespaceCreationFailed",
+			Message: fmt.Sprintf("Failed to create namespace: %v", err),
+		})
 		return ctrl.Result{}, fmt.Errorf("ensuring namespace: %w", err)
 	}
 
+	meta.SetStatusCondition(&provider.Status.Conditions, metav1.Condition{
+		Type:    "NamespaceReady",
+		Status:  metav1.ConditionTrue,
+		Reason:  "NamespaceCreated",
+		Message: fmt.Sprintf("Namespace %s is ready", provider.Spec.Namespace),
+	})
+
 	// Ensure admin secret exists BEFORE installing Gitea resources
 	// The deployment references this secret in environment variables
+	provider.Status.Message = "Creating admin secret"
 	if err := r.ensureAdminSecretWithoutToken(ctx, provider); err != nil {
 		return ctrl.Result{}, fmt.Errorf("ensuring admin secret: %w", err)
 	}
@@ -220,13 +243,34 @@ func (r *GiteaProviderReconciler) reconcileGitea(ctx context.Context, provider *
 		// Continue anyway - webhook might not be installed, or this might be a different setup
 	} else if !ready {
 		logger.Info("Nginx admission webhook not ready yet, requeuing to prevent race condition")
+		provider.Status.Message = "Waiting for nginx admission webhook"
+		meta.SetStatusCondition(&provider.Status.Conditions, metav1.Condition{
+			Type:    "ResourcesDeployed",
+			Status:  metav1.ConditionFalse,
+			Reason:  "WaitingForNginxWebhook",
+			Message: "Waiting for nginx admission webhook to be ready before creating Ingress resources",
+		})
 		return ctrl.Result{RequeueAfter: defaultRequeueTime}, nil
 	}
 
 	// Install Gitea resources using embedded manifests
+	provider.Status.Message = "Deploying Gitea resources"
 	if err := r.installGiteaResources(ctx, provider); err != nil {
+		meta.SetStatusCondition(&provider.Status.Conditions, metav1.Condition{
+			Type:    "ResourcesDeployed",
+			Status:  metav1.ConditionFalse,
+			Reason:  "ResourceDeploymentFailed",
+			Message: fmt.Sprintf("Failed to deploy Gitea resources: %v", err),
+		})
 		return ctrl.Result{}, fmt.Errorf("installing Gitea resources: %w", err)
 	}
+
+	meta.SetStatusCondition(&provider.Status.Conditions, metav1.Condition{
+		Type:    "ResourcesDeployed",
+		Status:  metav1.ConditionTrue,
+		Reason:  "ResourcesCreated",
+		Message: "Gitea resources have been deployed to the cluster",
+	})
 
 	logger.V(1).Info("Gitea resources installed", "namespace", provider.Spec.Namespace)
 	return ctrl.Result{}, nil
@@ -312,6 +356,13 @@ func (r *GiteaProviderReconciler) isGiteaReady(ctx context.Context, provider *v1
 
 	if err != nil {
 		if errors.IsNotFound(err) {
+			provider.Status.Message = "Waiting for Gitea deployment to be created"
+			meta.SetStatusCondition(&provider.Status.Conditions, metav1.Condition{
+				Type:    "DeploymentReady",
+				Status:  metav1.ConditionFalse,
+				Reason:  "DeploymentNotFound",
+				Message: "Gitea deployment not found",
+			})
 			return false, nil
 		}
 		return false, err
@@ -320,30 +371,73 @@ func (r *GiteaProviderReconciler) isGiteaReady(ctx context.Context, provider *v1
 	// Check deployment status
 	availableReplicas, found, err := unstructured.NestedInt64(deployment.Object, "status", "availableReplicas")
 	if err != nil || !found {
+		provider.Status.Message = "Waiting for Gitea deployment status"
+		meta.SetStatusCondition(&provider.Status.Conditions, metav1.Condition{
+			Type:    "DeploymentReady",
+			Status:  metav1.ConditionFalse,
+			Reason:  "DeploymentStatusUnavailable",
+			Message: "Gitea deployment status not yet available",
+		})
 		return false, nil
 	}
 
 	if availableReplicas < 1 {
+		provider.Status.Message = "Waiting for Gitea pods to become ready"
+		meta.SetStatusCondition(&provider.Status.Conditions, metav1.Condition{
+			Type:    "DeploymentReady",
+			Status:  metav1.ConditionFalse,
+			Reason:  "PodsNotReady",
+			Message: "Gitea deployment has no available replicas",
+		})
 		return false, nil
 	}
+
+	// Deployment is ready
+	meta.SetStatusCondition(&provider.Status.Conditions, metav1.Condition{
+		Type:    "DeploymentReady",
+		Status:  metav1.ConditionTrue,
+		Reason:  "DeploymentAvailable",
+		Message: fmt.Sprintf("Gitea deployment has %d available replica(s)", availableReplicas),
+	})
 
 	// Check if Gitea API endpoint is accessible
 	config := r.buildConfigFromSpec(provider)
 	baseUrl := util.GiteaBaseUrl(config)
 	logger.V(1).Info("checking gitea api endpoint", "url", baseUrl)
 
+	provider.Status.Message = fmt.Sprintf("Checking Gitea API accessibility at %s", baseUrl)
 	c := util.GetHttpClient()
 	resp, err := c.Get(baseUrl)
 	if err != nil {
 		logger.V(1).Info("Gitea API not yet accessible", "error", err)
+		meta.SetStatusCondition(&provider.Status.Conditions, metav1.Condition{
+			Type:    "APIAccessible",
+			Status:  metav1.ConditionFalse,
+			Reason:  "EndpointUnreachable",
+			Message: fmt.Sprintf("Gitea API endpoint %s is not yet accessible: %v", baseUrl, err),
+		})
 		return false, nil
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		logger.V(1).Info("Gitea API returned non-OK status", "statusCode", resp.StatusCode)
+		meta.SetStatusCondition(&provider.Status.Conditions, metav1.Condition{
+			Type:    "APIAccessible",
+			Status:  metav1.ConditionFalse,
+			Reason:  "UnexpectedStatusCode",
+			Message: fmt.Sprintf("Gitea API endpoint returned status code %d", resp.StatusCode),
+		})
 		return false, nil
 	}
+
+	// API is accessible
+	meta.SetStatusCondition(&provider.Status.Conditions, metav1.Condition{
+		Type:    "APIAccessible",
+		Status:  metav1.ConditionTrue,
+		Reason:  "EndpointReachable",
+		Message: fmt.Sprintf("Gitea API endpoint %s is accessible", baseUrl),
+	})
 
 	return true, nil
 }
