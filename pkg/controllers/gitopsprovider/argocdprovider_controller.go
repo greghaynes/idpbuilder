@@ -129,7 +129,7 @@ func (r *ArgoCDProviderReconciler) installArgoCD(ctx context.Context, argocdProv
 func (r *ArgoCDProviderReconciler) getTemplateData(ctx context.Context) (interface{}, error) {
 	logger := log.FromContext(ctx)
 
-	// Retrieve the self-signed certificate from the ConfigMap
+	// Retrieve the self-signed certificate from the Secret
 	secret := &corev1.Secret{}
 	err := r.Get(ctx, types.NamespacedName{
 		Name:      globals.SelfSignedCertCMName,
@@ -139,7 +139,7 @@ func (r *ArgoCDProviderReconciler) getTemplateData(ctx context.Context) (interfa
 	var selfSignedCert string
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			logger.Info("Self-signed certificate ConfigMap not found, ArgoCD will be installed without TLS certificates")
+			logger.Info("Self-signed certificate Secret not found, ArgoCD will be installed without TLS certificates")
 			selfSignedCert = ""
 		} else {
 			return nil, fmt.Errorf("failed to get self-signed certificate: %w", err)
@@ -147,14 +147,14 @@ func (r *ArgoCDProviderReconciler) getTemplateData(ctx context.Context) (interfa
 	} else {
 		certData, ok := secret.Data[globals.SelfSignedCertCMKeyName]
 		if !ok {
-			logger.Info("Certificate data not found in ConfigMap, ArgoCD will be installed without TLS certificates")
+			logger.Info("Certificate data not found in Secret, ArgoCD will be installed without TLS certificates")
 			selfSignedCert = ""
 		} else {
 			selfSignedCert = string(certData)
 		}
 	}
 
-	// Import the v1alpha1 API to use BuildCustomizationSpec
+	// Create template data with all required fields for ArgoCD templates
 	templateData := struct {
 		Protocol       string
 		Host           string
