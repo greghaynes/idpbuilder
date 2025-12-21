@@ -18,6 +18,13 @@ if [ -z "${PR_NUMBER:-}" ]; then
     exit 0
 fi
 
+# Get repository from git remote (owner/repo format)
+REPO=$(git remote get-url origin | sed -E 's#https://github.com/##; s#git@github.com:##; s#\.git$##')
+if [ -z "$REPO" ]; then
+    echo "Error: Could not determine repository from git remote"
+    exit 1
+fi
+
 # Generate coverage report
 echo "Generating coverage report from $COVERAGE_FILE..."
 
@@ -107,7 +114,7 @@ EOF
 )
 
 # Post comment to PR
-echo "Posting coverage comment to PR #${PR_NUMBER}..."
-echo "$COMMENT_BODY" | gh pr comment "$PR_NUMBER" --body-file -
+echo "Posting coverage comment to PR #${PR_NUMBER} in ${REPO}..."
+echo "$COMMENT_BODY" | gh pr comment "$PR_NUMBER" --repo "$REPO" --body-file -
 
 echo "✅ Coverage comment posted successfully!"
