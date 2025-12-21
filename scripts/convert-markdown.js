@@ -13,6 +13,13 @@ const { marked } = require('marked');
 const renderer = new marked.Renderer();
 const originalCodeRenderer = renderer.code.bind(renderer);
 
+// Helper function to sanitize language identifier
+const sanitizeLanguage = (lang) => {
+  if (!lang) return '';
+  // Only allow alphanumeric, dash, and underscore characters
+  return lang.replace(/[^a-zA-Z0-9_-]/g, '');
+};
+
 renderer.code = function(code, language) {
   if (language === 'mermaid') {
     // Return mermaid code block with the class that mermaid.js will process
@@ -20,7 +27,8 @@ renderer.code = function(code, language) {
   }
   // Add line-numbers class for Prism.js
   if (language) {
-    return `<pre class="line-numbers"><code class="language-${language}">${code}</code></pre>`;
+    const safeLang = sanitizeLanguage(language);
+    return `<pre class="line-numbers"><code class="language-${safeLang}">${code}</code></pre>`;
   }
   return originalCodeRenderer(code, language);
 };
