@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"fmt"
 
+	"github.com/cnoe-io/idpbuilder/api/v1alpha1"
 	"github.com/cnoe-io/idpbuilder/api/v1alpha2"
 	"github.com/cnoe-io/idpbuilder/globals"
 	"github.com/cnoe-io/idpbuilder/pkg/controllers/localbuild"
@@ -126,7 +127,7 @@ func (r *ArgoCDProviderReconciler) installArgoCD(ctx context.Context, argocdProv
 }
 
 // getTemplateData retrieves the BuildCustomizationSpec data needed for ArgoCD template rendering
-func (r *ArgoCDProviderReconciler) getTemplateData(ctx context.Context) (interface{}, error) {
+func (r *ArgoCDProviderReconciler) getTemplateData(ctx context.Context) (v1alpha1.BuildCustomizationSpec, error) {
 	logger := log.FromContext(ctx)
 
 	// Retrieve the self-signed certificate from the Secret
@@ -142,7 +143,7 @@ func (r *ArgoCDProviderReconciler) getTemplateData(ctx context.Context) (interfa
 			logger.Info("Self-signed certificate Secret not found, ArgoCD will be installed without TLS certificates")
 			selfSignedCert = ""
 		} else {
-			return nil, fmt.Errorf("failed to get self-signed certificate: %w", err)
+			return v1alpha1.BuildCustomizationSpec{}, fmt.Errorf("failed to get self-signed certificate: %w", err)
 		}
 	} else {
 		certData, ok := secret.Data[globals.SelfSignedCertCMKeyName]
@@ -155,15 +156,7 @@ func (r *ArgoCDProviderReconciler) getTemplateData(ctx context.Context) (interfa
 	}
 
 	// Create template data with all required fields for ArgoCD templates
-	templateData := struct {
-		Protocol       string
-		Host           string
-		IngressHost    string
-		Port           string
-		UsePathRouting bool
-		SelfSignedCert string
-		StaticPassword bool
-	}{
+	templateData := v1alpha1.BuildCustomizationSpec{
 		Protocol:       "https",
 		Host:           globals.DefaultHostName,
 		IngressHost:    globals.DefaultHostName,
