@@ -140,7 +140,9 @@ func (r *Reporter) render() {
 	// In simple mode, only output on state changes, no inline updates
 	if r.simpleMode {
 		output := r.buildSimpleOutput()
-		fmt.Fprint(r.writer, output)
+		if output != "" {
+			fmt.Fprint(r.writer, output)
+		}
 		return
 	}
 

@@ -36,10 +36,16 @@ const (
 	extraPackagesUsage             = "Paths to locations containing custom packages"
 	packageCustomizationFilesUsage = "Name of the package and the path to file to customize the core packages with. " +
 		"valid package names are: argocd, nginx, and gitea. e.g. argocd:/tmp/argocd.yaml"
-	noExitUsage         = "When set, idpbuilder will not exit after all packages are synced. Useful for continuously syncing local directories."
-	statusOutputUsage   = "Status output mode. Supported values: auto (default), simple, verbose, none. 'auto' uses inline status in terminals, 'simple' shows status without inline updates, 'verbose' shows detailed logs, 'none' disables status output."
-	noColorUsage        = "Disable colored output for both logs and status reporting."
-	quietUsage          = "Suppress status output (equivalent to --status-output=none)."
+	noExitUsage       = "When set, idpbuilder will not exit after all packages are synced. Useful for continuously syncing local directories."
+	statusOutputUsage = "Status output mode. Supported values: auto (default), simple, verbose, none. 'auto' uses inline status in terminals, 'simple' shows status without inline updates, 'verbose' shows detailed logs, 'none' disables status output."
+	noColorUsage      = "Disable colored output for both logs and status reporting."
+	quietUsage        = "Suppress status output (equivalent to --status-output=none)."
+
+	// Status output modes
+	statusOutputAuto    = "auto"
+	statusOutputSimple  = "simple"
+	statusOutputVerbose = "verbose"
+	statusOutputNone    = "none"
 )
 
 var (
@@ -172,20 +178,26 @@ func create(cmd *cobra.Command, args []string) error {
 	// Priority: --quiet flag > --status-output flag > default
 	statusMode := statusOutput
 	if quiet {
-		statusMode = "none"
+		statusMode = statusOutputNone
 	}
 
 	// Validate status output mode
-	validModes := map[string]bool{"auto": true, "simple": true, "verbose": true, "none": true}
+	validModes := map[string]bool{
+		statusOutputAuto:    true,
+		statusOutputSimple:  true,
+		statusOutputVerbose: true,
+		statusOutputNone:    true,
+	}
 	if !validModes[statusMode] {
-		return fmt.Errorf("invalid status-output value: %s. Supported values are: auto, simple, verbose, none", statusMode)
+		return fmt.Errorf("invalid status-output value: %s. Supported values are: %s, %s, %s, %s",
+			statusMode, statusOutputAuto, statusOutputSimple, statusOutputVerbose, statusOutputNone)
 	}
 
 	// Create status reporter based on mode
 	var reporter *status.Reporter
-	if statusMode != "none" && statusMode != "verbose" {
+	if statusMode != statusOutputNone && statusMode != statusOutputVerbose {
 		reporter = status.NewReporter(useColor)
-		if statusMode == "simple" {
+		if statusMode == statusOutputSimple {
 			reporter.SetSimpleMode(true)
 		}
 		reporter.AddStep("cluster", "Creating Kubernetes cluster")
@@ -225,23 +237,21 @@ func create(cmd *cobra.Command, args []string) error {
 
 	b := build.NewBuild(opts)
 
-	if err := b.Run(ctx, recreateCluster); err != nil {
+	// Ensure summary is always printed if reporter exists
+	defer func() {
 		if reporter != nil {
 			reporter.Summary()
 		}
+	}()
+
+	if err := b.Run(ctx, recreateCluster); err != nil {
 		return err
 	}
 
 	if cmd.Context().Err() != nil {
-		if reporter != nil {
-			reporter.Summary()
-		}
 		return context.Cause(cmd.Context())
 	}
 
-	if reporter != nil {
-		reporter.Summary()
-	}
 	printSuccessMsg()
 	return nil
 }
