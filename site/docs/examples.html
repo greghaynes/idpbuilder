@@ -50,6 +50,30 @@
             background-color: var(--bg-alt);
             color: var(--primary-color);
         }
+        .docs-sidebar details {
+            margin-bottom: 0.5rem;
+        }
+        .docs-sidebar summary {
+            cursor: pointer;
+            padding: 0.5rem;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            user-select: none;
+            border-radius: 4px;
+            transition: background-color 0.3s;
+        }
+        .docs-sidebar summary:hover {
+            background-color: var(--bg-alt);
+        }
+        .docs-sidebar details[open] > summary {
+            background-color: var(--bg-alt);
+            margin-bottom: 0.5rem;
+        }
+        .docs-sidebar details ul {
+            margin-left: 0;
+            padding-left: 1rem;
+        }
         .docs-content {
             max-width: 800px;
             width: 100%;
@@ -165,36 +189,43 @@
                 <h3>Documentation</h3>
                 <ul>
                     <li><a href="/docs">Overview</a></li>
-                    <li><a href="/docs#architecture">Architecture</a></li>
-                    <li><a href="/docs#installation">Installation</a></li>
-                    <li><a href="/docs#getting-started">Getting Started</a></li>
                 </ul>
                 
-                <h3>Examples</h3>
-                <ul>
-                    <li><a href="/docs/examples.html" class="active">Examples Overview</a></li>
-                    <li><a href="/docs/examples/README.html">Platform Examples</a></li>
-                    <li><a href="/docs/examples/v1alpha2/README.html">V1Alpha2 Examples</a></li>
-                </ul>
+                <details open>
+                    <summary>Examples</summary>
+                    <ul>
+                        <li><a href="/docs/examples.html" class="active">Examples Overview</a></li>
+                        <li><a href="/docs/examples/platform-simple.html">Simple Platform</a></li>
+                        <li><a href="/docs/examples/platform-complete.html">Complete Platform</a></li>
+                        <li><a href="/docs/examples/giteaprovider-simple.html">Simple GiteaProvider</a></li>
+                    </ul>
+                </details>
                 
-                <h3>Technical Specs</h3>
-                <ul>
-                    <li><a href="/docs/specs/controller-architecture-spec.html">V2 Controller Architecture</a></li>
-                    <li><a href="/docs/specs/hyperscaler-provider-spec.html">Hyperscaler Provider Implementation</a></li>
-                    <li><a href="/docs/specs/pluggable-packages.html">Pluggable Packages</a></li>
-                </ul>
+                <details>
+                    <summary>V1Alpha2 Examples</summary>
+                    <ul>
+                        <li><a href="/docs/examples/v1alpha2/platform-with-gateway.html">Platform with Gateway</a></li>
+                        <li><a href="/docs/examples/v1alpha2/giteaprovider.html">GiteaProvider</a></li>
+                        <li><a href="/docs/examples/v1alpha2/nginxgateway.html">NginxGateway</a></li>
+                    </ul>
+                </details>
                 
-                <h3>Implementation Docs</h3>
-                <ul>
-                    <li><a href="/docs/implementation/test-duration-summary.html">Test Duration Summary</a></li>
-                    <li><a href="/docs/implementation/test-timing-analysis.html">Test Timing Analysis</a></li>
-                </ul>
+                <details>
+                    <summary>Technical Specs</summary>
+                    <ul>
+                        <li><a href="/docs/specs/controller-architecture-spec.html">V2 Controller Architecture</a></li>
+                        <li><a href="/docs/specs/hyperscaler-provider-spec.html">Hyperscaler Provider</a></li>
+                        <li><a href="/docs/specs/pluggable-packages.html">Pluggable Packages</a></li>
+                    </ul>
+                </details>
                 
-                <h3>User Guides</h3>
-                <ul>
-                    <li><a href="/docs/user/minimum-requirements.html">Minimum Requirements</a></li>
-                    <li><a href="/docs/user/private-registries.html">Private Registries</a></li>
-                </ul>
+                <details>
+                    <summary>User Guides</summary>
+                    <ul>
+                        <li><a href="/docs/user/minimum-requirements.html">Minimum Requirements</a></li>
+                        <li><a href="/docs/user/private-registries.html">Private Registries</a></li>
+                    </ul>
+                </details>
             </aside>
 
             <article class="docs-content">
@@ -216,16 +247,18 @@
                     <h3>Simple Platform</h3>
                     <p>A basic Platform CR that references a GiteaProvider. This is the minimal configuration needed to get started.</p>
                     <p><strong>Use this when:</strong> You want a simple setup with just Git provider support.</p>
-                    <a href="/docs/examples/platform-simple.yaml" class="btn" download>Download YAML</a>
-                    <a href="https://github.com/cnoe-io/idpbuilder/blob/main/examples/platform-simple.yaml" class="btn btn-secondary" target="_blank" rel="noopener">View on GitHub</a>
+                    <p><strong>Complexity:</strong> Beginner</p>
+                    <a href="/docs/examples/platform-simple.html" class="btn">View Example →</a>
+                    <a href="/docs/examples/platform-simple.yaml" class="btn btn-secondary" download>Download YAML</a>
                 </div>
 
                 <div class="example-card">
                     <h3>Complete Platform</h3>
                     <p>A complete example with both Platform and GiteaProvider CRs in a single file. This shows the full configuration with all components together.</p>
                     <p><strong>Use this when:</strong> You want to deploy everything in one go with a complete configuration.</p>
-                    <a href="/docs/examples/platform-complete.yaml" class="btn" download>Download YAML</a>
-                    <a href="https://github.com/cnoe-io/idpbuilder/blob/main/examples/platform-complete.yaml" class="btn btn-secondary" target="_blank" rel="noopener">View on GitHub</a>
+                    <p><strong>Complexity:</strong> Intermediate</p>
+                    <a href="/docs/examples/platform-complete.html" class="btn">View Example →</a>
+                    <a href="/docs/examples/platform-complete.yaml" class="btn btn-secondary" download>Download YAML</a>
                 </div>
 
                 <h2>GiteaProvider Examples</h2>
@@ -234,16 +267,18 @@
                     <h3>Simple GiteaProvider</h3>
                     <p>A basic GiteaProvider CR with auto-generated credentials and organizations. This is the easiest way to get a Git server running.</p>
                     <p><strong>Use this when:</strong> You want a quick Git provider setup with default configurations.</p>
-                    <a href="/docs/examples/giteaprovider-simple.yaml" class="btn" download>Download YAML</a>
-                    <a href="https://github.com/cnoe-io/idpbuilder/blob/main/examples/giteaprovider-simple.yaml" class="btn btn-secondary" target="_blank" rel="noopener">View on GitHub</a>
+                    <p><strong>Complexity:</strong> Beginner</p>
+                    <a href="/docs/examples/giteaprovider-simple.html" class="btn">View Example →</a>
+                    <a href="/docs/examples/giteaprovider-simple.yaml" class="btn btn-secondary" download>Download YAML</a>
                 </div>
 
                 <h2>V1Alpha2 Examples</h2>
                 <p>The v1alpha2 architecture introduces a modular, provider-based system where platform components are managed through separate Custom Resources.</p>
 
                 <div class="example-card">
-                    <h3>V1Alpha2 Complete Setup</h3>
+                    <h3>Platform with Gateway</h3>
                     <p>A complete v1alpha2 configuration including Platform, GiteaProvider, and NginxGateway CRs. This demonstrates the new modular architecture.</p>
+                    <p><strong>Complexity:</strong> Intermediate</p>
                     <p><strong>Features:</strong></p>
                     <ul>
                         <li>Modular provider-based architecture</li>
@@ -251,19 +286,23 @@
                         <li>Duck-typed status fields for better integration</li>
                         <li>Support for alternative providers</li>
                     </ul>
-                    <a href="/docs/examples/v1alpha2/README.html" class="btn">View V1Alpha2 Guide</a>
-                    <a href="/docs/examples/v1alpha2/platform-with-gateway.yaml" class="btn" download>Download Platform CR</a>
+                    <a href="/docs/examples/v1alpha2/platform-with-gateway.html" class="btn">View Example →</a>
+                    <a href="/docs/examples/v1alpha2/platform-with-gateway.yaml" class="btn btn-secondary" download>Download YAML</a>
                 </div>
 
                 <div class="example-card">
-                    <h3>Individual V1Alpha2 Provider Examples</h3>
+                    <h3>Individual Provider Examples</h3>
                     <p>Individual provider configurations that can be mixed and matched:</p>
-                    <ul>
-                        <li><strong>GiteaProvider:</strong> Git server provider configuration</li>
-                        <li><strong>NginxGateway:</strong> Nginx Ingress Controller configuration</li>
-                    </ul>
-                    <a href="/docs/examples/v1alpha2/giteaprovider.yaml" class="btn" download>GiteaProvider YAML</a>
-                    <a href="/docs/examples/v1alpha2/nginxgateway.yaml" class="btn" download>NginxGateway YAML</a>
+                    <div style="margin-top: 1rem;">
+                        <p><strong>GiteaProvider:</strong> Git server provider configuration</p>
+                        <a href="/docs/examples/v1alpha2/giteaprovider.html" class="btn">View GiteaProvider →</a>
+                        <a href="/docs/examples/v1alpha2/giteaprovider.yaml" class="btn btn-secondary" download>Download YAML</a>
+                    </div>
+                    <div style="margin-top: 1rem;">
+                        <p><strong>NginxGateway:</strong> Nginx Ingress Controller configuration</p>
+                        <a href="/docs/examples/v1alpha2/nginxgateway.html" class="btn">View NginxGateway →</a>
+                        <a href="/docs/examples/v1alpha2/nginxgateway.yaml" class="btn btn-secondary" download>Download YAML</a>
+                    </div>
                 </div>
 
                 <h2>Usage Instructions</h2>
