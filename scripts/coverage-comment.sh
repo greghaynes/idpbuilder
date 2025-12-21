@@ -19,9 +19,10 @@ if [ -z "${PR_NUMBER:-}" ]; then
 fi
 
 # Get repository from git remote (owner/repo format)
-REPO=$(git remote get-url origin | sed -E 's#https://github.com/##; s#git@github.com:##; s#\.git$##')
+REPO=$(git remote get-url origin 2>/dev/null | sed -E 's#https://github.com/##; s#git@github.com:##; s#\.git$##')
 if [ -z "$REPO" ]; then
-    echo "Error: Could not determine repository from git remote"
+    REMOTE_URL=$(git remote get-url origin 2>/dev/null || echo "none")
+    echo "Error: Could not determine repository from git remote. Remote URL: $REMOTE_URL"
     exit 1
 fi
 
