@@ -92,6 +92,7 @@ func (r *LocalbuildReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{RequeueAfter: errRequeueTime}, nil
 	}
 
+	// Create NginxGateway CR early in reconciliation
 	if err := r.ensureNginxGatewayExists(ctx, &localBuild); err != nil {
 		logger.Error(err, "Failed to ensure NginxGateway exists")
 		return ctrl.Result{RequeueAfter: errRequeueTime}, nil
