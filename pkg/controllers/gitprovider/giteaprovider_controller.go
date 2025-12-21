@@ -192,28 +192,9 @@ func (r *GiteaProviderReconciler) reconcileGitea(ctx context.Context, provider *
 func (r *GiteaProviderReconciler) installGiteaResources(ctx context.Context, provider *v1alpha2.GiteaProvider) error {
 	logger := log.FromContext(ctx)
 
-	// Get the BuildCustomizationSpec from Localbuild CR if r.Config is empty
-	config := r.Config
-	if config.Host == "" {
-		// Try to get config from Localbuild CR
-		localbuild := &v1alpha1.Localbuild{}
-		if err := r.Get(ctx, types.NamespacedName{Name: "localdev", Namespace: "default"}, localbuild); err != nil {
-			if !errors.IsNotFound(err) {
-				logger.Error(err, "Failed to get Localbuild CR for configuration")
-			}
-			// If Localbuild doesn't exist, use sensible defaults
-			logger.Info("Using default configuration for Gitea templates")
-			config = v1alpha1.BuildCustomizationSpec{
-				Protocol:       "http",
-				Host:           "cnoe.localtest.me",
-				Port:           "8080",
-				UsePathRouting: false,
-			}
-		} else {
-			config = localbuild.Spec.BuildCustomization
-			logger.V(1).Info("Using BuildCustomization from Localbuild CR", "protocol", config.Protocol, "host", config.Host, "port", config.Port)
-		}
-	}
+	// Build configuration from provider spec with defaults
+	config := r.buildConfigFromSpec(provider)
+	logger.V(1).Info("Using configuration for Gitea templates", "protocol", config.Protocol, "host", config.Host, "port", config.Port, "usePathRouting", config.UsePathRouting)
 
 	// Use the exported function from gitea package to get raw Gitea resources
 	rawResources, err := gitea.RawGiteaInstallResources(config, v1alpha1.PackageCustomization{}, r.Scheme)
@@ -237,6 +218,29 @@ func (r *GiteaProviderReconciler) installGiteaResources(ctx context.Context, pro
 
 	logger.V(1).Info("Gitea manifests applied", "count", len(installObjs))
 	return nil
+}
+
+// buildConfigFromSpec creates a BuildCustomizationSpec from the GiteaProvider spec with defaults
+func (r *GiteaProviderReconciler) buildConfigFromSpec(provider *v1alpha2.GiteaProvider) v1alpha1.BuildCustomizationSpec {
+	config := v1alpha1.BuildCustomizationSpec{
+		Protocol:       provider.Spec.Protocol,
+		Host:           provider.Spec.Host,
+		Port:           provider.Spec.Port,
+		UsePathRouting: provider.Spec.UsePathRouting,
+	}
+
+	// Apply defaults if values are empty
+	if config.Protocol == "" {
+		config.Protocol = "http"
+	}
+	if config.Host == "" {
+		config.Host = "cnoe.localtest.me"
+	}
+	if config.Port == "" {
+		config.Port = "8080"
+	}
+
+	return config
 }
 
 // isGiteaReady checks if the Gitea deployment is ready
@@ -276,7 +280,8 @@ func (r *GiteaProviderReconciler) isGiteaReady(ctx context.Context, provider *v1
 	}
 
 	// Check if Gitea API endpoint is accessible
-	baseUrl := util.GiteaBaseUrl(r.Config)
+	config := r.buildConfigFromSpec(provider)
+	baseUrl := util.GiteaBaseUrl(config)
 	logger.V(1).Info("checking gitea api endpoint", "url", baseUrl)
 
 	c := util.GetHttpClient()

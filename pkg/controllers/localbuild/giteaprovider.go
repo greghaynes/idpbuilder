@@ -38,10 +38,14 @@ func (r *LocalbuildReconciler) ReconcileGiteaProvider(ctx context.Context, req c
 			return fmt.Errorf("setting controller reference: %w", err)
 		}
 
-		// Set spec
+		// Set spec with build customization values
 		giteaProvider.Spec = v1alpha2.GiteaProviderSpec{
-			Namespace: util.GiteaNamespace,
-			Version:   "1.24.3",
+			Namespace:      util.GiteaNamespace,
+			Version:        "1.24.3",
+			Protocol:       resource.Spec.BuildCustomization.Protocol,
+			Host:           resource.Spec.BuildCustomization.Host,
+			Port:           resource.Spec.BuildCustomization.Port,
+			UsePathRouting: resource.Spec.BuildCustomization.UsePathRouting,
 			AdminUser: v1alpha2.GiteaAdminUser{
 				Username:     v1alpha1.GiteaAdminUserName,
 				Email:        "admin@cnoe.localtest.me",

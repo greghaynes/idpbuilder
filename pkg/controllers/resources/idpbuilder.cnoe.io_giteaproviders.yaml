@@ -87,6 +87,10 @@ spec:
                     description: Username is the admin username
                     type: string
                 type: object
+              host:
+                default: cnoe.localtest.me
+                description: Host is the hostname for Gitea endpoint
+                type: string
               namespace:
                 default: gitea
                 description: Namespace is the namespace where Gitea will be deployed
@@ -106,6 +110,19 @@ spec:
                   - name
                   type: object
                 type: array
+              port:
+                default: "8080"
+                description: Port is the port for Gitea endpoint
+                type: string
+              protocol:
+                default: http
+                description: Protocol is the protocol to use for Gitea endpoint (http
+                  or https)
+                type: string
+              usePathRouting:
+                default: false
+                description: UsePathRouting indicates whether to use path-based routing
+                type: boolean
               version:
                 default: 1.24.3
                 description: Version is the version of Gitea to install
