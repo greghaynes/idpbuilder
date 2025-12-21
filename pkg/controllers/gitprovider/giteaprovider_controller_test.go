@@ -2032,7 +2032,6 @@ func TestGiteaProviderReconciler_HostDefaults(t *testing.T) {
 		})
 	}
 }
-
 func TestStatusConditions(t *testing.T) {
 	scheme := k8s.GetScheme()
 
