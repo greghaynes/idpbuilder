@@ -7,20 +7,22 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"golang.org/x/term"
 )
 
 // ANSI color codes
 const (
-	Reset        = "\033[0m"
-	Green        = "\033[32m"
-	Yellow       = "\033[33m"
-	Blue         = "\033[34m"
-	Red          = "\033[31m"
-	Gray         = "\033[90m"
-	Bold         = "\033[1m"
-	ClearLine    = "\033[2K"
-	CursorUp     = "\033[1A"
-	SaveCursor   = "\033[s"
+	Reset         = "\033[0m"
+	Green         = "\033[32m"
+	Yellow        = "\033[33m"
+	Blue          = "\033[34m"
+	Red           = "\033[31m"
+	Gray          = "\033[90m"
+	Bold          = "\033[1m"
+	ClearLine     = "\033[2K"
+	CursorUp      = "\033[1A"
+	SaveCursor    = "\033[s"
 	RestoreCursor = "\033[u"
 )
 
@@ -77,7 +79,7 @@ func (r *Reporter) AddStep(name, description string) {
 func (r *Reporter) StartStep(name string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	
+
 	for i := range r.steps {
 		if r.steps[i].Name == name {
 			r.steps[i].State = StateRunning
@@ -93,7 +95,7 @@ func (r *Reporter) StartStep(name string) {
 func (r *Reporter) CompleteStep(name string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	
+
 	for i := range r.steps {
 		if r.steps[i].Name == name {
 			r.steps[i].State = StateComplete
@@ -108,7 +110,7 @@ func (r *Reporter) CompleteStep(name string) {
 func (r *Reporter) FailStep(name string, err error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	
+
 	for i := range r.steps {
 		if r.steps[i].Name == name {
 			r.steps[i].State = StateFailed
@@ -125,7 +127,7 @@ func (r *Reporter) FailStep(name string, err error) {
 // render updates the display with current status
 func (r *Reporter) render() {
 	isTerminal := r.isTerminal()
-	
+
 	// Clear previous output if in interactive mode
 	// Count the actual lines that need to be cleared
 	if r.lastOutput != "" && isTerminal {
@@ -135,7 +137,7 @@ func (r *Reporter) render() {
 			fmt.Fprintf(r.writer, "%s%s\r", CursorUp, ClearLine)
 		}
 	}
-	
+
 	output := r.buildOutput()
 	fmt.Fprint(r.writer, output)
 	r.lastOutput = output
@@ -144,15 +146,15 @@ func (r *Reporter) render() {
 // buildOutput creates the status display
 func (r *Reporter) buildOutput() string {
 	var output string
-	
+
 	// Title
 	output += fmt.Sprintf("\n%s%sIDPBuilder Progress%s\n", r.color(Bold), r.color(Blue), r.color(Reset))
-	
+
 	// Steps
 	for i, step := range r.steps {
 		symbol := r.getSymbol(step.State)
 		color := r.getColor(step.State)
-		
+
 		status := ""
 		if step.State == StateRunning {
 			status = fmt.Sprintf(" %s(in progress)%s", r.color(Gray), r.color(Reset))
@@ -160,21 +162,21 @@ func (r *Reporter) buildOutput() string {
 			duration := step.EndTime.Sub(step.StartTime).Round(time.Millisecond)
 			status = fmt.Sprintf(" %s(%s)%s", r.color(Gray), duration, r.color(Reset))
 		}
-		
+
 		// Format: [✓] Step description (status)
-		output += fmt.Sprintf("  %s%s%s %s%s\n", 
-			r.color(color), 
-			symbol, 
-			r.color(Reset), 
+		output += fmt.Sprintf("  %s%s%s %s%s\n",
+			r.color(color),
+			symbol,
+			r.color(Reset),
 			step.Description,
 			status)
-		
+
 		// Add separator after current running step
 		if i == r.currentIdx && step.State == StateRunning {
 			output += fmt.Sprintf("  %s│%s\n", r.color(Blue), r.color(Reset))
 		}
 	}
-	
+
 	return output
 }
 
@@ -221,11 +223,7 @@ func (r *Reporter) color(code string) string {
 // isTerminal checks if output is a terminal
 func (r *Reporter) isTerminal() bool {
 	if f, ok := r.writer.(*os.File); ok {
-		fileInfo, err := f.Stat()
-		if err != nil {
-			return false
-		}
-		return (fileInfo.Mode() & os.ModeCharDevice) != 0
+		return term.IsTerminal(int(f.Fd()))
 	}
 	return false
 }
@@ -234,10 +232,10 @@ func (r *Reporter) isTerminal() bool {
 func (r *Reporter) Summary() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	
+
 	// Ensure we have a clean final render
 	r.render()
-	
+
 	// Count states
 	completed := 0
 	failed := 0
@@ -248,12 +246,12 @@ func (r *Reporter) Summary() {
 			failed++
 		}
 	}
-	
+
 	if failed > 0 {
-		fmt.Fprintf(r.writer, "\n%s%s✗ Build failed: %d/%d steps completed%s\n", 
+		fmt.Fprintf(r.writer, "\n%s%s✗ Build failed: %d/%d steps completed%s\n",
 			r.color(Bold), r.color(Red), completed, len(r.steps), r.color(Reset))
 	} else {
-		fmt.Fprintf(r.writer, "\n%s%s✓ Build completed successfully: %d/%d steps%s\n", 
+		fmt.Fprintf(r.writer, "\n%s%s✓ Build completed successfully: %d/%d steps%s\n",
 			r.color(Bold), r.color(Green), completed, len(r.steps), r.color(Reset))
 	}
 }

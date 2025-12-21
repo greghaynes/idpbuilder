@@ -353,6 +353,9 @@ func (b *Build) Run(ctx context.Context, recreateCluster bool) error {
 			b.statusReporter.CompleteStep("packages")
 		}
 	case <-ctx.Done():
+		if b.statusReporter != nil {
+			b.statusReporter.CompleteStep("packages")
+		}
 		return nil
 	}
 	return nil
