@@ -3,12 +3,12 @@ package gitopsprovider
 import (
 	"context"
 	"crypto/rand"
-	"embed"
 	"encoding/base64"
 	"fmt"
 
 	"github.com/cnoe-io/idpbuilder/api/v1alpha2"
 	"github.com/cnoe-io/idpbuilder/globals"
+	"github.com/cnoe-io/idpbuilder/pkg/controllers/localbuild"
 	"github.com/cnoe-io/idpbuilder/pkg/k8s"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -20,9 +20,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
-
-//go:embed resources/argo/*
-var installArgoFS embed.FS
 
 // ArgoCDProviderReconciler reconciles an ArgoCDProvider object
 type ArgoCDProviderReconciler struct {
@@ -104,8 +101,9 @@ func (r *ArgoCDProviderReconciler) installArgoCD(ctx context.Context, argocdProv
 		return fmt.Errorf("failed to ensure namespace: %w", err)
 	}
 
-	// Load and apply embedded manifests
-	installObjs, err := k8s.BuildCustomizedObjects("", "resources/argo", installArgoFS, r.Scheme, nil)
+	// Load and apply embedded manifests from localbuild resources
+	// Reuse the same ArgoCD installation manifests from localbuild package
+	installObjs, err := k8s.BuildCustomizedObjects("", "resources/argo", localbuild.GetArgoFS(), r.Scheme, nil)
 	if err != nil {
 		return fmt.Errorf("failed to build argocd manifests: %w", err)
 	}
