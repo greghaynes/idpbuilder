@@ -661,7 +661,7 @@ func (r *LocalbuildReconciler) reconcileCustomPkgFile(ctx context.Context, resou
 
 func (r *LocalbuildReconciler) reconcileGitRepo(ctx context.Context, resource *v1alpha1.Localbuild, repoType, repoName, embeddedName, absPath string) (*v1alpha1.GitRepository, error) {
 	logger := log.FromContext(ctx)
-	
+
 	// Get GiteaProvider using duck-typing to retrieve status
 	giteaProvider := &v1alpha2.GiteaProvider{}
 	err := r.Get(ctx, client.ObjectKey{
@@ -701,7 +701,7 @@ func (r *LocalbuildReconciler) reconcileGitRepo(ctx context.Context, resource *v
 	if gitProviderStatus.InternalEndpoint == "" {
 		return nil, fmt.Errorf("GiteaProvider internal endpoint is not set")
 	}
-	
+
 	repo := &v1alpha1.GitRepository{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      repoName,
