@@ -13,6 +13,7 @@ import (
 	"github.com/cnoe-io/idpbuilder/pkg/build"
 	"github.com/cnoe-io/idpbuilder/pkg/cmd/helpers"
 	"github.com/cnoe-io/idpbuilder/pkg/k8s"
+	"github.com/cnoe-io/idpbuilder/pkg/status"
 	"github.com/spf13/cobra"
 	"k8s.io/client-go/util/homedir"
 )
@@ -149,6 +150,14 @@ func create(cmd *cobra.Command, args []string) error {
 		maybeRegistryConfig = registryConfig
 	}
 
+	// Create status reporter
+	reporter := status.NewReporter(helpers.ColoredOutput)
+	reporter.AddStep("cluster", "Creating Kubernetes cluster")
+	reporter.AddStep("crds", "Installing Custom Resource Definitions")
+	reporter.AddStep("networking", "Configuring networking and certificates")
+	reporter.AddStep("resources", "Creating platform resources")
+	reporter.AddStep("packages", "Installing and syncing packages")
+
 	opts := build.NewBuildOptions{
 		Name:              buildName,
 		KubeVersion:       kubeVersion,
@@ -172,20 +181,24 @@ func create(cmd *cobra.Command, args []string) error {
 		ExitOnSync:           exitOnSync,
 		PackageCustomization: o,
 
-		Scheme:     k8s.GetScheme(),
-		CancelFunc: ctxCancel,
+		Scheme:         k8s.GetScheme(),
+		CancelFunc:     ctxCancel,
+		StatusReporter: reporter,
 	}
 
 	b := build.NewBuild(opts)
 
 	if err := b.Run(ctx, recreateCluster); err != nil {
+		reporter.Summary()
 		return err
 	}
 
 	if cmd.Context().Err() != nil {
+		reporter.Summary()
 		return context.Cause(cmd.Context())
 	}
 
+	reporter.Summary()
 	printSuccessMsg()
 	return nil
 }
