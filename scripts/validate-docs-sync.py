@@ -44,6 +44,12 @@ def extract_nav_links(html_file: str) -> Dict[str, Set[str]]:
     """
     Extract documentation links from the site navigation HTML.
     
+    Expects links in the format: <a href="/docs/{category}/{file}.html">Title</a>
+    where category is one of: specs, implementation, user
+    
+    The regex pattern handles standard HTML attributes but assumes well-formed HTML.
+    It will not correctly handle escaped quotes or complex nested structures.
+    
     Args:
         html_file: Path to site/docs/index.html
     
@@ -58,6 +64,7 @@ def extract_nav_links(html_file: str) -> Dict[str, Set[str]]:
         content = f.read()
     
     # Pattern to match links like: <a href="/docs/implementation/file.html">Title</a>
+    # Captures: (category, filename, link_text)
     link_pattern = r'<a href="/docs/(specs|implementation|user)/([^"]+)">([^<]+)</a>'
     links_found = re.findall(link_pattern, content)
     
@@ -65,9 +72,10 @@ def extract_nav_links(html_file: str) -> Dict[str, Set[str]]:
     linked_files = {'specs': set(), 'implementation': set(), 'user': set()}
     
     for category, filename, text in links_found:
-        # Convert .html to .md
-        md_file = filename.replace('.html', '.md')
-        linked_files[category].add(md_file)
+        # Convert .html to .md (assumes all links end with .html)
+        if filename.endswith('.html'):
+            md_file = filename.replace('.html', '.md')
+            linked_files[category].add(md_file)
     
     return linked_files
 
