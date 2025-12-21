@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"sync"
 	"time"
 )
@@ -55,7 +56,7 @@ type Reporter struct {
 // NewReporter creates a new status reporter
 func NewReporter(colored bool) *Reporter {
 	return &Reporter{
-		steps:   make([]Step, 0),
+		steps:   []Step{},
 		writer:  os.Stdout,
 		colored: colored,
 	}
@@ -123,10 +124,13 @@ func (r *Reporter) FailStep(name string, err error) {
 
 // render updates the display with current status
 func (r *Reporter) render() {
+	isTerminal := r.isTerminal()
+	
 	// Clear previous output if in interactive mode
-	if r.lastOutput != "" && r.isTerminal() {
-		// Move cursor up and clear lines
-		lineCount := len(r.steps) + 1
+	// Count the actual lines that need to be cleared
+	if r.lastOutput != "" && isTerminal {
+		// Count lines in previous output to clear properly
+		lineCount := strings.Count(r.lastOutput, "\n")
 		for i := 0; i < lineCount; i++ {
 			fmt.Fprintf(r.writer, "%s%s\r", CursorUp, ClearLine)
 		}
