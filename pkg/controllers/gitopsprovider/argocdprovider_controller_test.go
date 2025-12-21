@@ -415,7 +415,7 @@ func TestArgoCDProviderReconciler_UpdateStatus(t *testing.T) {
 	assert.NotNil(t, argocdProvider.Status.CredentialsSecretRef, "Credentials secret ref should be set")
 	assert.Equal(t, "argocd-admin-secret", argocdProvider.Status.CredentialsSecretRef.Name,
 		"Secret ref name should be set")
-	
+
 	// Verify Ready condition is set
 	assert.NotEmpty(t, argocdProvider.Status.Conditions, "Conditions should not be empty")
 	var readyCondition *metav1.Condition
@@ -639,7 +639,7 @@ func TestArgoCDProviderReconciler_InstallationError(t *testing.T) {
 
 	// Verify status reflects the failure
 	assert.Equal(t, "Failed", updatedProvider.Status.Phase, "Phase should be Failed")
-	
+
 	// Verify Ready condition reflects the failure
 	var readyCondition *metav1.Condition
 	for i := range updatedProvider.Status.Conditions {
