@@ -22,7 +22,7 @@ type mockClient struct {
 
 func (m *mockClient) Get(ctx context.Context, key types.NamespacedName, obj client.Object, opts ...client.GetOption) error {
 	// For CRDs, ignore the namespace and use empty string
-	// Create a copy to avoid mutating the caller's data
+	// Create a new NamespacedName struct to avoid mutating the caller's parameter
 	if _, ok := obj.(*apiextensionsv1.CustomResourceDefinition); ok {
 		key = types.NamespacedName{Name: key.Name, Namespace: ""}
 	}
