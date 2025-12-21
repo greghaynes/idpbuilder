@@ -20,15 +20,29 @@ const sanitizeLanguage = (lang) => {
   return lang.replace(/[^a-zA-Z0-9_-]/g, '');
 };
 
+// Helper function to escape HTML entities
+const escapeHtml = (text) => {
+  const map = {
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#039;'
+  };
+  return text.replace(/[&<>"']/g, (m) => map[m]);
+};
+
 renderer.code = function(code, language) {
   if (language === 'mermaid') {
-    // Return mermaid code block with the class that mermaid.js will process
+    // Mermaid diagrams need unescaped code to be rendered by mermaid.js
+    // Note: This is safe because mermaid.js will parse and render the content
     return `<pre class="mermaid">${code}</pre>`;
   }
   // Add line-numbers class for Prism.js
   if (language) {
     const safeLang = sanitizeLanguage(language);
-    return `<pre class="line-numbers"><code class="language-${safeLang}">${code}</code></pre>`;
+    const escapedCode = escapeHtml(code);
+    return `<pre class="line-numbers"><code class="language-${safeLang}">${escapedCode}</code></pre>`;
   }
   return originalCodeRenderer(code, language);
 };
