@@ -64,6 +64,8 @@ type LocalbuildReconciler struct {
 		AddSubStep(parentName, subStepName, description string)
 		UpdateSubStep(parentName, subStepName string, state int)
 	}
+	subStepsInitialized bool
+	mu                  sync.Mutex
 }
 
 type subReconciler func(ctx context.Context, req ctrl.Request, resource *v1alpha1.Localbuild) (ctrl.Result, error)
@@ -158,10 +160,30 @@ func (r *LocalbuildReconciler) installCorePackages(ctx context.Context, req ctrl
 	}
 	logger.V(1).Info("installing core packages")
 	
-	// Add sub-steps for each package
-	if r.StatusReporter != nil {
+	// Add sub-steps for each package only once
+	r.mu.Lock()
+	shouldAddSubSteps := !r.subStepsInitialized
+	if shouldAddSubSteps {
+		r.subStepsInitialized = true
+	}
+	r.mu.Unlock()
+	
+	if shouldAddSubSteps && r.StatusReporter != nil {
 		for name := range installers {
 			r.StatusReporter.AddSubStep("packages", name, name)
+		}
+		// Also add sub-steps for custom packages
+		for i := range resource.Spec.PackageConfigs.CustomPackageDirs {
+			name := fmt.Sprintf("custom-dir-%d", i)
+			r.StatusReporter.AddSubStep("packages", name, resource.Spec.PackageConfigs.CustomPackageDirs[i])
+		}
+		for i := range resource.Spec.PackageConfigs.CustomPackageFiles {
+			name := fmt.Sprintf("custom-file-%d", i)
+			r.StatusReporter.AddSubStep("packages", name, resource.Spec.PackageConfigs.CustomPackageFiles[i])
+		}
+		for i := range resource.Spec.PackageConfigs.CustomPackageUrls {
+			name := fmt.Sprintf("custom-url-%d", i)
+			r.StatusReporter.AddSubStep("packages", name, resource.Spec.PackageConfigs.CustomPackageUrls[i])
 		}
 	}
 	
@@ -259,22 +281,6 @@ func (r *LocalbuildReconciler) ReconcileArgoAppsWithGitea(ctx context.Context, r
 	// NOTE: Gitea removed - now managed by GiteaProvider controller, not as an ArgoCD app
 	// NOTE: IngressNginx removed - now managed by NginxGateway controller (v2)
 	bootStrapApps := []string{v1alpha1.ArgoCDPackageName}
-	
-	// Add sub-steps for custom packages
-	if r.StatusReporter != nil {
-		for i := range resource.Spec.PackageConfigs.CustomPackageDirs {
-			name := fmt.Sprintf("custom-dir-%d", i)
-			r.StatusReporter.AddSubStep("packages", name, resource.Spec.PackageConfigs.CustomPackageDirs[i])
-		}
-		for i := range resource.Spec.PackageConfigs.CustomPackageFiles {
-			name := fmt.Sprintf("custom-file-%d", i)
-			r.StatusReporter.AddSubStep("packages", name, resource.Spec.PackageConfigs.CustomPackageFiles[i])
-		}
-		for i := range resource.Spec.PackageConfigs.CustomPackageUrls {
-			name := fmt.Sprintf("custom-url-%d", i)
-			r.StatusReporter.AddSubStep("packages", name, resource.Spec.PackageConfigs.CustomPackageUrls[i])
-		}
-	}
 	
 	for _, n := range bootStrapApps {
 		result, err := r.reconcileEmbeddedApp(ctx, n, resource)

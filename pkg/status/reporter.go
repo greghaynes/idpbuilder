@@ -81,6 +81,16 @@ func (r *Reporter) SetSimpleMode(simple bool) {
 	r.simpleMode = simple
 }
 
+// GetSteps returns a copy of the current steps (for testing)
+func (r *Reporter) GetSteps() []Step {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	// Return a copy to prevent external modification
+	steps := make([]Step, len(r.steps))
+	copy(steps, r.steps)
+	return steps
+}
+
 // AddStep adds a new step to the workflow
 func (r *Reporter) AddStep(name, description string) {
 	r.mu.Lock()
