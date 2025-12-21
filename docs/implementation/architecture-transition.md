@@ -4,77 +4,51 @@
 
 ### Current State (v1alpha1 with Localbuild)
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                          CLI (build.go)                         │
-│  - Creates Kind cluster                                         │
-│  - Deploys controllers                                          │
-│  - Creates Localbuild CR ⚠️ (TO BE REMOVED)                     │
-└────────────────────────┬────────────────────────────────────────┘
-                         │
-                         ▼
-┌─────────────────────────────────────────────────────────────────┐
-│              LocalbuildReconciler (DEPRECATED)                  │
-│  ❌ Installs ArgoCD directly (embedded manifests)               │
-│  ❌ Installs Gitea directly (embedded manifests)                │
-│  ❌ Installs Nginx directly (embedded manifests)                │
-│  ❌ Creates GitRepository CRs                                   │
-│  ❌ Creates ArgoCD Applications                                 │
-│  ❌ Handles custom packages                                     │
-└─────────────────────────────────────────────────────────────────┘
+```mermaid
+graph TB
+    CLI["<b>CLI (build.go)</b><br/>- Creates Kind cluster<br/>- Deploys controllers<br/>- Creates Localbuild CR ⚠️ (TO BE REMOVED)"]
+    LB["<b>LocalbuildReconciler (DEPRECATED)</b><br/>❌ Installs ArgoCD directly (embedded manifests)<br/>❌ Installs Gitea directly (embedded manifests)<br/>❌ Installs Nginx directly (embedded manifests)<br/>❌ Creates GitRepository CRs<br/>❌ Creates ArgoCD Applications<br/>❌ Handles custom packages"]
+    
+    CLI --> LB
+    
+    style CLI fill:#ffe6e6,stroke:#cc0000
+    style LB fill:#fff0e6,stroke:#ff9900
 ```
 
 ### Target State (v1alpha2 with Platform + Providers)
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                          CLI (build.go)                             │
-│  - Creates Kind cluster                                             │
-│  - Deploys controllers                                              │
-│  ✅ Creates GiteaProvider CR                                        │
-│  🔲 Creates NginxGateway CR (NEEDS IMPLEMENTATION)                  │
-│  🔲 Creates ArgoCDProvider CR (NEEDS IMPLEMENTATION)                │
-│  ✅ Creates Platform CR (partial - needs all provider refs)         │
-└────────────┬────────────────────────────────────────────────────────┘
-             │
-             ▼
-┌──────────────────────────────────────────────────────────────────────┐
-│                      PlatformReconciler                              │
-│  🔲 Establishes owner references to provider CRs                     │
-│     (NEEDS IMPLEMENTATION - spec lines 531-611)                      │
-│  ✅ Aggregates Git provider status (duck-typing)                     │
-│  ✅ Aggregates Gateway provider status (duck-typing)                 │
-│  🔲 Aggregates GitOps provider status (NEEDS IMPLEMENTATION)         │
-│  🔲 Creates bootstrap GitRepository CRs (NEEDS IMPLEMENTATION)       │
-│  🔲 Creates ArgoCD Applications for bootstrap (NEEDS IMPL)           │
-│  ✅ Updates Platform.Status with aggregated info                     │
-└──────────────────┬───────────────────────────────────────────────────┘
-                   │
-                   │ (adds owner references)
-                   ▼
-    ┌──────────────┴──────────────┬─────────────────────────┐
-    │                             │                         │
-    ▼                             ▼                         ▼
-┌───────────────────┐    ┌──────────────────┐    ┌──────────────────┐
-│ GiteaProvider CR  │    │ NginxGateway CR  │    │ ArgoCDProvider CR│
-│                   │    │                  │    │                  │
-│ ✅ CRD exists     │    │ ✅ CRD exists    │    │ ✅ CRD exists    │
-│ ✅ Controller OK  │    │ ✅ Controller OK │    │ ✅ Controller OK │
-│ 🔲 Waits for      │    │ 🔲 Waits for     │    │ 🔲 Waits for     │
-│    owner ref      │    │    owner ref     │    │    owner ref     │
-│    (NEEDS IMPL)   │    │    (NEEDS IMPL)  │    │    (NEEDS IMPL)  │
-│ 🔲 Discovers      │    │ 🔲 Discovers     │    │ 🔲 Discovers     │
-│    config from    │    │    config from   │    │    config from   │
-│    Platform       │    │    Platform      │    │    Platform      │
-│    (NEEDS IMPL)   │    │    (NEEDS IMPL)  │    │    (NEEDS IMPL)  │
-└─────────┬─────────┘    └────────┬─────────┘    └────────┬─────────┘
-          │                       │                       │
-          │ (installs)            │ (installs)            │ (installs)
-          ▼                       ▼                       ▼
-    ┌──────────┐          ┌──────────────┐         ┌──────────┐
-    │  Gitea   │          │    Nginx     │         │  ArgoCD  │
-    │  Pods    │          │ Ingress Pods │         │   Pods   │
-    └──────────┘          └──────────────┘         └──────────┘
+```mermaid
+graph TB
+    CLI["<b>CLI (build.go)</b><br/>- Creates Kind cluster<br/>- Deploys controllers<br/>✅ Creates GiteaProvider CR<br/>🔲 Creates NginxGateway CR (NEEDS IMPL)<br/>🔲 Creates ArgoCDProvider CR (NEEDS IMPL)<br/>✅ Creates Platform CR (partial)"]
+    
+    Platform["<b>PlatformReconciler</b><br/>🔲 Establishes owner references (NEEDS IMPL)<br/>✅ Aggregates Git provider status<br/>✅ Aggregates Gateway provider status<br/>🔲 Aggregates GitOps provider status (NEEDS IMPL)<br/>🔲 Creates bootstrap GitRepository CRs (NEEDS IMPL)<br/>🔲 Creates ArgoCD Applications (NEEDS IMPL)<br/>✅ Updates Platform.Status"]
+    
+    GiteaProvider["<b>GiteaProvider CR</b><br/>✅ CRD exists<br/>✅ Controller OK<br/>🔲 Waits for owner ref (NEEDS IMPL)<br/>🔲 Discovers config from Platform (NEEDS IMPL)"]
+    
+    NginxGateway["<b>NginxGateway CR</b><br/>✅ CRD exists<br/>✅ Controller OK<br/>🔲 Waits for owner ref (NEEDS IMPL)<br/>🔲 Discovers config from Platform (NEEDS IMPL)"]
+    
+    ArgoCDProvider["<b>ArgoCDProvider CR</b><br/>✅ CRD exists<br/>✅ Controller OK<br/>🔲 Waits for owner ref (NEEDS IMPL)<br/>🔲 Discovers config from Platform (NEEDS IMPL)"]
+    
+    Gitea["Gitea<br/>Pods"]
+    Nginx["Nginx<br/>Ingress Pods"]
+    ArgoCD["ArgoCD<br/>Pods"]
+    
+    CLI --> Platform
+    Platform -->|adds owner references| GiteaProvider
+    Platform -->|adds owner references| NginxGateway
+    Platform -->|adds owner references| ArgoCDProvider
+    GiteaProvider -->|installs| Gitea
+    NginxGateway -->|installs| Nginx
+    ArgoCDProvider -->|installs| ArgoCD
+    
+    style CLI fill:#e1f5ff,stroke:#01579b
+    style Platform fill:#fff9c4,stroke:#f57f17
+    style GiteaProvider fill:#f3e5f5,stroke:#7b1fa2
+    style NginxGateway fill:#fce4ec,stroke:#c2185b
+    style ArgoCDProvider fill:#e0f2f1,stroke:#00695c
+    style Gitea fill:#e8f5e9,stroke:#2e7d32
+    style Nginx fill:#e8f5e9,stroke:#2e7d32
+    style ArgoCD fill:#e8f5e9,stroke:#2e7d32
 ```
 
 ## Key Differences
@@ -229,21 +203,28 @@ Legend:
 
 ## Critical Path Analysis
 
-```
-Owner Reference Pattern (Phase A)
-         │
-         ├─► Platform Bootstrap (Phase B) ──┐
-         │                                  │
-         └─► CLI Integration (Phase C) ─────┤
-                                            │
-                                            ▼
-                          GitOps Aggregation (Phase D)
-                                            │
-                                            ▼
-                          Custom Packages (Phase E)
-                                            │
-                                            ▼
-                          Remove Localbuild (Phase F)
+```mermaid
+graph TB
+    PhaseA["<b>Phase A:</b><br/>Owner Reference Pattern"]
+    PhaseB["<b>Phase B:</b><br/>Platform Bootstrap"]
+    PhaseC["<b>Phase C:</b><br/>CLI Integration"]
+    PhaseD["<b>Phase D:</b><br/>GitOps Aggregation"]
+    PhaseE["<b>Phase E:</b><br/>Custom Packages"]
+    PhaseF["<b>Phase F:</b><br/>Remove Localbuild"]
+    
+    PhaseA --> PhaseB
+    PhaseA --> PhaseC
+    PhaseB --> PhaseD
+    PhaseC --> PhaseD
+    PhaseD --> PhaseE
+    PhaseE --> PhaseF
+    
+    style PhaseA fill:#ff9999,stroke:#cc0000,stroke-width:3px
+    style PhaseB fill:#ffcc99,stroke:#ff9900
+    style PhaseC fill:#ffcc99,stroke:#ff9900
+    style PhaseD fill:#ffff99,stroke:#cccc00
+    style PhaseE fill:#ccffcc,stroke:#00cc00
+    style PhaseF fill:#99ccff,stroke:#0066cc
 ```
 
 **Critical dependencies:**
@@ -265,50 +246,42 @@ Owner Reference Pattern (Phase A)
 
 ## Estimated Timeline
 
-```
-Week 1: Owner Reference Pattern + GitOps Aggregation
-├─ Days 1-2: Implement Platform.ensureOwnerReference()
-├─ Days 3-4: Update all provider controllers to wait
-├─ Day 5: Implement aggregateGitOpsProviders()
-└─ Testing and validation
-
-Week 2: CLI Integration + Platform Bootstrap
-├─ Days 1-2: Add createNginxGateway() and createArgoCDProvider()
-├─ Days 2-3: Update createPlatform() with all refs
-├─ Days 4-5: Move bootstrap repository creation to Platform
-└─ Testing and validation
-
-Week 3: Custom Packages + Comprehensive Testing
-├─ Days 1-2: Decide and implement custom package approach
-├─ Days 3-5: Integration testing, E2E testing
-└─ Performance benchmarking
-
-Week 4: Remove Localbuild + Final Validation
-├─ Days 1-2: Remove Localbuild CR from CLI
-├─ Days 3-4: Remove Localbuild controller code
-├─ Day 5: Documentation updates, final review
-└─ Release preparation
+```mermaid
+gantt
+    title 4-Week Implementation Timeline
+    dateFormat  YYYY-MM-DD
+    section Week 1
+    Owner Reference Pattern           :active, w1a, 2025-01-06, 2d
+    Update Provider Controllers       :active, w1b, after w1a, 2d
+    GitOps Aggregation               :active, w1c, after w1b, 1d
+    section Week 2
+    CLI Integration                   :w2a, 2025-01-13, 2d
+    Platform Bootstrap                :w2b, after w2a, 3d
+    section Week 3
+    Custom Packages                   :w3a, 2025-01-20, 2d
+    Integration Testing               :w3b, after w3a, 2d
+    Performance Benchmarking          :w3c, after w3b, 1d
+    section Week 4
+    Remove Localbuild CR              :w4a, 2025-01-27, 2d
+    Remove Localbuild Controller      :w4b, after w4a, 2d
+    Documentation & Final Review      :w4c, after w4b, 1d
 ```
 
 ## Success Metrics
 
-**Before:**
-```
-Time to cluster ready: ~2-3 minutes
-Components: 1 CR (Localbuild)
-Controllers: 1 (LocalbuildReconciler)
-Flexibility: Low (embedded logic)
-Customization: Requires recompilation
-```
+**Before (v1alpha1):**
+- Time to cluster ready: ~2-3 minutes
+- Components: 1 CR (Localbuild)
+- Controllers: 1 (LocalbuildReconciler)
+- Flexibility: Low (embedded logic)
+- Customization: Requires recompilation
 
-**After:**
-```
-Time to cluster ready: ~2-3 minutes (same or better)
-Components: 4 CRs (Platform + 3 Providers)
-Controllers: 4 (Platform + 3 Provider reconcilers)
-Flexibility: High (declarative CRs)
-Customization: YAML-based
-```
+**After (v1alpha2):**
+- Time to cluster ready: ~2-3 minutes (same or better)
+- Components: 4 CRs (Platform + 3 Providers)
+- Controllers: 4 (Platform + 3 Provider reconcilers)
+- Flexibility: High (declarative CRs)
+- Customization: YAML-based
 
 ## Validation Checklist
 
