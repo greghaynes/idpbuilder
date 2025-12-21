@@ -325,8 +325,8 @@ func (r *GiteaProviderReconciler) isGiteaReady(ctx context.Context, provider *v1
 	return true, nil
 }
 
-// ensureAdminSecret ensures the admin secret exists and has a token
-func (r *GiteaProviderReconciler) ensureAdminSecret(ctx context.Context, provider *v1alpha2.GiteaProvider) (*corev1.Secret, error) {
+// createAdminSecretIfNotExists creates the admin secret with username and password if it doesn't exist
+func (r *GiteaProviderReconciler) createAdminSecretIfNotExists(ctx context.Context, provider *v1alpha2.GiteaProvider) (*corev1.Secret, error) {
 	logger := log.FromContext(ctx)
 
 	secretName := util.GiteaAdminSecret
@@ -371,6 +371,17 @@ func (r *GiteaProviderReconciler) ensureAdminSecret(ctx context.Context, provide
 		}
 	}
 
+	return secret, nil
+}
+
+// ensureAdminSecret ensures the admin secret exists and has a token
+func (r *GiteaProviderReconciler) ensureAdminSecret(ctx context.Context, provider *v1alpha2.GiteaProvider) (*corev1.Secret, error) {
+	// First ensure the secret exists with username and password
+	secret, err := r.createAdminSecretIfNotExists(ctx, provider)
+	if err != nil {
+		return nil, err
+	}
+
 	// Ensure token exists
 	if _, ok := secret.Data[util.GiteaAdminTokenFieldName]; !ok {
 		// Get token from Gitea API
@@ -388,8 +399,8 @@ func (r *GiteaProviderReconciler) ensureAdminSecret(ctx context.Context, provide
 
 		// Update secret with token
 		u := &unstructured.Unstructured{}
-		u.SetName(secretName)
-		u.SetNamespace(secretNamespace)
+		u.SetName(util.GiteaAdminSecret)
+		u.SetNamespace(provider.Spec.Namespace)
 		u.SetGroupVersionKind(corev1.SchemeGroupVersion.WithKind("Secret"))
 
 		if err := unstructured.SetNestedField(u.Object, encodedToken, "data", util.GiteaAdminTokenFieldName); err != nil {
@@ -401,7 +412,7 @@ func (r *GiteaProviderReconciler) ensureAdminSecret(ctx context.Context, provide
 		}
 
 		// Refetch secret
-		if err := r.Get(ctx, types.NamespacedName{Namespace: secretNamespace, Name: secretName}, secret); err != nil {
+		if err := r.Get(ctx, types.NamespacedName{Namespace: provider.Spec.Namespace, Name: util.GiteaAdminSecret}, secret); err != nil {
 			return nil, err
 		}
 	}
@@ -412,51 +423,8 @@ func (r *GiteaProviderReconciler) ensureAdminSecret(ctx context.Context, provide
 // ensureAdminSecretWithoutToken creates the admin secret with username and password only
 // This should be called BEFORE installing Gitea resources since the deployment references this secret
 func (r *GiteaProviderReconciler) ensureAdminSecretWithoutToken(ctx context.Context, provider *v1alpha2.GiteaProvider) error {
-	logger := log.FromContext(ctx)
-
-	secretName := util.GiteaAdminSecret
-	secretNamespace := provider.Spec.Namespace
-
-	secret := &corev1.Secret{}
-	err := r.Get(ctx, types.NamespacedName{
-		Namespace: secretNamespace,
-		Name:      secretName,
-	}, secret)
-
-	if err != nil {
-		if errors.IsNotFound(err) {
-			// Create new secret with generated password
-			genPassword, err := util.GeneratePassword()
-			if err != nil {
-				return fmt.Errorf("generating password: %w", err)
-			}
-
-			username := provider.Spec.AdminUser.Username
-			if username == "" {
-				username = "giteaAdmin"
-			}
-
-			secret = &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      secretName,
-					Namespace: secretNamespace,
-				},
-				StringData: map[string]string{
-					"username": username,
-					"password": genPassword,
-				},
-			}
-
-			if err := r.Create(ctx, secret); err != nil {
-				return fmt.Errorf("creating admin secret: %w", err)
-			}
-			logger.Info("Created Gitea admin secret", "name", secretName)
-		} else {
-			return fmt.Errorf("getting admin secret: %w", err)
-		}
-	}
-
-	return nil
+	_, err := r.createAdminSecretIfNotExists(ctx, provider)
+	return err
 }
 
 // handleDeletion handles cleanup when GiteaProvider is deleted
