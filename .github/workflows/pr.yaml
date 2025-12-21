@@ -37,8 +37,7 @@ jobs:
           fi
           make test
       - name: Report coverage
-        uses: vladopajic/go-test-coverage@6a0f52f20f1af2379c929b7c47f402a1ba682797 # v2.10.3
-        with:
-          profile: cover.out
-          local-prefix: github.com/greghaynes/idpbuilder
-          threshold-total: 0
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: ./scripts/coverage-comment.sh cover.out
