@@ -36,9 +36,9 @@ jobs:
             exit 1
           fi
           make test
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@e28ff129e5465c2c0dcc6f003fc735cb6ae0c673 # v5.0.2
+      - name: Report coverage
+        uses: vladopajic/go-test-coverage@6a0f52f20f1af2379c929b7c47f402a1ba682797 # v2.10.3
         with:
-          files: ./cover.out
-          flags: unittests
-          fail_ci_if_error: false
+          profile: cover.out
+          local-prefix: github.com/greghaynes/idpbuilder
+          threshold-total: 0
