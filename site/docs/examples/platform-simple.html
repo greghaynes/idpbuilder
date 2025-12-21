@@ -152,7 +152,8 @@
         }
         @media (max-width: 768px) {
             .docs-container {
-                grid-template-columns: 1fr;
+                grid-template-columns: minmax(0, 1fr);
+                gap: 0;
             }
             .docs-sidebar {
                 position: relative;
@@ -161,6 +162,9 @@
                 padding: 1rem;
                 border-radius: 5px;
                 margin-bottom: 1rem;
+                width: 100%;
+                min-width: 0;
+                overflow-x: auto;
             }
         }
     </style>
