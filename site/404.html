@@ -33,7 +33,10 @@
             <div class="logo">
                 <h1>IDP Builder</h1>
             </div>
-            <ul class="nav-links">
+            <button class="menu-toggle" aria-label="Toggle menu" onclick="toggleMenu()">
+                ☰
+            </button>
+            <ul class="nav-links" id="navLinks">
                 <li><a href="/">Home</a></li>
                 <li><a href="/docs">Docs</a></li>
                 <li><a href="https://github.com/cnoe-io/idpbuilder" target="_blank" rel="noopener">GitHub</a></li>
@@ -58,5 +61,59 @@
             <p>&copy; 2024 CNOE IDP Builder. Licensed under <a href="https://github.com/cnoe-io/idpbuilder/blob/main/LICENSE" target="_blank" rel="noopener">Apache License 2.0</a></p>
         </div>
     </footer>
+
+    <script>
+        function toggleMenu() {
+            const navLinks = document.getElementById('navLinks');
+            navLinks.classList.toggle('active');
+        }
+
+        // Close menu when clicking outside
+        document.addEventListener('click', function(event) {
+            const nav = document.querySelector('nav');
+            const navLinks = document.getElementById('navLinks');
+            
+            if (!nav.contains(event.target)) {
+                navLinks.classList.remove('active');
+            }
+        });
+
+        // Auto-hide navigation on scroll down, show on scroll up (mobile only)
+        let lastScrollTop = 0;
+        const header = document.querySelector('header');
+        const navLinksElement = document.getElementById('navLinks');
+        const scrollDelta = 5; // Minimum scroll distance to trigger hide/show
+        
+        function handleNavVisibility() {
+            const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+            
+            // Only apply auto-hide on mobile screens
+            if (window.innerWidth <= 768) {
+                // Make sure we've scrolled more than the delta
+                if (Math.abs(lastScrollTop - scrollTop) <= scrollDelta) {
+                    return;
+                }
+                
+                // Scrolling down
+                if (scrollTop > lastScrollTop && scrollTop > 100) {
+                    header.classList.add('nav-hidden');
+                    // Also close the mobile menu if it's open
+                    navLinksElement.classList.remove('active');
+                } 
+                // Scrolling up
+                else if (scrollTop < lastScrollTop) {
+                    header.classList.remove('nav-hidden');
+                }
+                
+                lastScrollTop = scrollTop;
+            } else {
+                // Remove nav-hidden class on desktop
+                header.classList.remove('nav-hidden');
+            }
+        }
+        
+        window.addEventListener('scroll', handleNavVisibility);
+        window.addEventListener('resize', handleNavVisibility);
+    </script>
 </body>
 </html>

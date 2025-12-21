@@ -22,10 +22,13 @@
             <div class="logo">
                 <h1>IDP Builder</h1>
             </div>
-            <ul class="nav-links">
-                <li><a href="#about">About</a></li>
-                <li><a href="#features">Features</a></li>
-                <li><a href="#getting-started">Getting Started</a></li>
+            <button class="menu-toggle" aria-label="Toggle menu" onclick="toggleMenu()">
+                ☰
+            </button>
+            <ul class="nav-links" id="navLinks">
+                <li><a href="#about" onclick="closeMenu()">About</a></li>
+                <li><a href="#features" onclick="closeMenu()">Features</a></li>
+                <li><a href="#getting-started" onclick="closeMenu()">Getting Started</a></li>
                 <li><a href="/docs">Docs</a></li>
                 <li><a href="https://github.com/cnoe-io/idpbuilder" target="_blank" rel="noopener">GitHub</a></li>
             </ul>
@@ -82,6 +85,56 @@
             </div>
         </section>
 
+        <section id="architecture" class="section">
+            <div class="container">
+                <h2>Version 2 Architecture</h2>
+                <p>Version 2 introduces a modern controller-based architecture with clear separation between CLI and controllers:</p>
+                
+                <div class="features-grid">
+                    <div class="feature-card">
+                        <h3>🔧 CLI for Development</h3>
+                        <p>Use <code>idpbuilder create</code> to quickly provision local Kind clusters, deploy controllers, and create platform resources</p>
+                    </div>
+                    <div class="feature-card">
+                        <h3>☸️ Controllers for Production</h3>
+                        <p>Deploy idpbuilder controllers via Helm or kubectl to any Kubernetes cluster for production use</p>
+                    </div>
+                    <div class="feature-card">
+                        <h3>🔄 GitOps Native</h3>
+                        <p>Manage platform components declaratively through Custom Resources - no CLI required in production</p>
+                    </div>
+                    <div class="feature-card">
+                        <h3>🔌 Pluggable Providers</h3>
+                        <p>Choose your Git provider (Gitea, GitHub, GitLab), Gateway (Nginx, Envoy, Istio), and GitOps tool (ArgoCD, Flux)</p>
+                    </div>
+                </div>
+
+                <div style="margin-top: 2rem;">
+                    <h3>Two Deployment Modes</h3>
+                    <div class="features-grid">
+                        <div class="feature-card">
+                            <h4>Development Mode (CLI-Driven)</h4>
+                            <ul style="text-align: left; padding-left: 1rem;">
+                                <li>CLI provisions Kind cluster</li>
+                                <li>CLI deploys controllers</li>
+                                <li>CLI creates Platform CRs</li>
+                                <li>Quick local development</li>
+                            </ul>
+                        </div>
+                        <div class="feature-card">
+                            <h4>Production Mode (GitOps-Driven)</h4>
+                            <ul style="text-align: left; padding-left: 1rem;">
+                                <li>Pre-provisioned K8s cluster</li>
+                                <li>Install controllers via Helm</li>
+                                <li>CRs managed via GitOps</li>
+                                <li>Fully declarative</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
         <section id="getting-started" class="section">
             <div class="container">
                 <h2>Getting Started</h2>
@@ -131,5 +184,92 @@ tar xvzf idpbuilder-$os-$arch.tar.gz</code></pre>
             <p>&copy; 2024 CNOE IDP Builder. Licensed under <a href="https://github.com/cnoe-io/idpbuilder/blob/main/LICENSE" target="_blank" rel="noopener">Apache License 2.0</a></p>
         </div>
     </footer>
+
+    <script>
+        function toggleMenu() {
+            const navLinks = document.getElementById('navLinks');
+            navLinks.classList.toggle('active');
+        }
+
+        function closeMenu() {
+            const navLinks = document.getElementById('navLinks');
+            navLinks.classList.remove('active');
+        }
+
+        // Close menu when clicking outside
+        document.addEventListener('click', function(event) {
+            const nav = document.querySelector('nav');
+            const navLinks = document.getElementById('navLinks');
+            const menuToggle = document.querySelector('.menu-toggle');
+            
+            if (!nav.contains(event.target)) {
+                navLinks.classList.remove('active');
+            }
+        });
+
+        // Handle scroll to make navigation horizontal on mobile
+        const scrollThreshold = 100; // Pixels to scroll before changing layout
+        const navLinksElement = document.getElementById('navLinks');
+
+        function handleScroll() {
+            const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+            
+            // Only apply on mobile screens (matching the CSS breakpoint)
+            if (window.innerWidth <= 768) {
+                if (scrollTop > scrollThreshold) {
+                    navLinksElement.classList.add('scrolled');
+                } else {
+                    navLinksElement.classList.remove('scrolled');
+                }
+            } else {
+                navLinksElement.classList.remove('scrolled');
+            }
+        }
+
+        // Add scroll listener
+        window.addEventListener('scroll', handleScroll);
+        
+        // Also handle window resize
+        window.addEventListener('resize', handleScroll);
+        
+        // Initial check
+        handleScroll();
+
+        // Auto-hide navigation on scroll down, show on scroll up (mobile only)
+        let lastScrollTop = 0;
+        const header = document.querySelector('header');
+        const scrollDelta = 5; // Minimum scroll distance to trigger hide/show
+        
+        function handleNavVisibility() {
+            const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+            
+            // Only apply auto-hide on mobile screens
+            if (window.innerWidth <= 768) {
+                // Make sure we've scrolled more than the delta
+                if (Math.abs(lastScrollTop - scrollTop) <= scrollDelta) {
+                    return;
+                }
+                
+                // Scrolling down
+                if (scrollTop > lastScrollTop && scrollTop > 100) {
+                    header.classList.add('nav-hidden');
+                    // Also close the mobile menu if it's open
+                    navLinksElement.classList.remove('active');
+                } 
+                // Scrolling up
+                else if (scrollTop < lastScrollTop) {
+                    header.classList.remove('nav-hidden');
+                }
+                
+                lastScrollTop = scrollTop;
+            } else {
+                // Remove nav-hidden class on desktop
+                header.classList.remove('nav-hidden');
+            }
+        }
+        
+        window.addEventListener('scroll', handleNavVisibility);
+        window.addEventListener('resize', handleNavVisibility);
+    </script>
 </body>
 </html>

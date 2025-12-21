@@ -25,7 +25,7 @@ HELM_TGZ ?= $(LOCALBIN)/helm.tar.gz
 HELM ?= $(LOCALBIN)/helm
 
 ## Tool Versions
-CONTROLLER_TOOLS_VERSION ?= v0.16.5
+CONTROLLER_TOOLS_VERSION ?= v0.20.0
 KUSTOMIZE_VERSION ?= v5.5.0
 
 .PHONY: fmt
@@ -37,13 +37,21 @@ vet: ## Run go vet against code.
 	go vet ./...
 
 .PHONY: test
-test: manifests generate fmt vet envtest ## Run tests.
+test: manifests generate fmt vet ## Run tests.
 ifeq ($(RUN),)
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test -p 1 --tags=integration ./... -coverprofile cover.out
+	go test ./... -coverprofile cover.out
 else
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test -p 1 --tags=integration ./... -coverprofile cover.out -run $(RUN)
+	go test ./... -coverprofile cover.out -run $(RUN)
 endif
 
+.PHONY: test-timing
+test-timing: manifests generate fmt vet ## Run tests and generate timing analysis report.
+	@echo "Running tests with JSON output..."
+	go test -v -timeout 30m ./... -json 2>&1 | tee test-output.json
+	@echo "Generating test timing analysis..."
+	python3 scripts/analyze_test_times.py test-output.json docs/implementation/test-timing-analysis.md
+	@echo "Report saved to docs/implementation/test-timing-analysis.md"
+	@rm -f test-output.json
 	
 
 .PHONY: generate

@@ -3,7 +3,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.16.5
+    controller-gen.kubebuilder.io/version: v0.20.0
   name: nginxgateways.idpbuilder.cnoe.io
 spec:
   group: idpbuilder.cnoe.io
@@ -23,6 +23,9 @@ spec:
       type: string
     - jsonPath: .status.ingressClassName
       name: IngressClass
+      type: string
+    - jsonPath: .status.loadBalancerEndpoint
+      name: LoadBalancer
       type: string
     - jsonPath: .metadata.creationTimestamp
       name: Age
@@ -53,11 +56,11 @@ spec:
             description: NginxGatewaySpec defines the desired state of NginxGateway
             properties:
               ingressClass:
-                description: IngressClass configuration
+                description: IngressClass defines the ingress class configuration
                 properties:
                   isDefault:
                     default: true
-                    description: IsDefault indicates whether this should be the default
+                    description: IsDefault indicates if this should be the default
                       ingress class
                     type: boolean
                   name:
@@ -67,12 +70,13 @@ spec:
                 type: object
               namespace:
                 default: ingress-nginx
-                description: Namespace is the namespace where Nginx Ingress will be
-                  deployed
+                description: Namespace is the namespace where Nginx Ingress Controller
+                  will be deployed
                 type: string
               version:
                 default: 1.13.0
-                description: Version is the version of Nginx Ingress to install
+                description: Version is the version of Nginx Ingress Controller to
+                  install
                 type: string
             required:
             - namespace
@@ -138,6 +142,19 @@ spec:
                   - type
                   type: object
                 type: array
+              controller:
+                description: Controller contains information about the Nginx controller
+                  deployment
+                properties:
+                  readyReplicas:
+                    description: ReadyReplicas is the number of ready replicas
+                    format: int32
+                    type: integer
+                  replicas:
+                    description: Replicas is the desired number of replicas
+                    format: int32
+                    type: integer
+                type: object
               ingressClassName:
                 description: |-
                   IngressClassName is the name of the ingress class to use in Ingress resources

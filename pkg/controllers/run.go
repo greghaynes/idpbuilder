@@ -68,9 +68,7 @@ func RunControllers(
 		logger.Error(err, "unable to create custom package controller")
 	}
 
-	// Register v1alpha2 controllers (Phase 1.2 and 1.3)
-
-	// Platform controller
+	// Run Platform controller
 	if err := (&platform.PlatformReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
@@ -79,25 +77,27 @@ func RunControllers(
 		return err
 	}
 
-	// GiteaProvider controller (already exists from phase 1.1)
+	// Run GiteaProvider controller
 	if err := (&gitprovider.GiteaProviderReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
+		Config: cfg,
 	}).SetupWithManager(mgr); err != nil {
-		logger.Error(err, "unable to create giteaprovider controller")
+		logger.Error(err, "unable to create GiteaProvider controller")
 		return err
 	}
 
-	// NginxGateway controller (Phase 1.2)
+	// Run NginxGateway controller
 	if err := (&gatewayprovider.NginxGatewayReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
+		Config: cfg,
 	}).SetupWithManager(mgr); err != nil {
 		logger.Error(err, "unable to create nginxgateway controller")
 		return err
 	}
 
-	// ArgoCDProvider controller (Phase 1.3)
+	// Run ArgoCDProvider controller (Phase 1.3)
 	if err := (&gitopsprovider.ArgoCDProviderReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
