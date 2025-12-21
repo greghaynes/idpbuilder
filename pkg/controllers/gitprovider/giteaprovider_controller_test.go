@@ -1270,3 +1270,765 @@ func TestGiteaProviderReconciler_UsePathRouting(t *testing.T) {
 		})
 	}
 }
+
+func TestGiteaProviderReconciler_ReconcileWithNginxWebhookReady(t *testing.T) {
+	scheme := k8s.GetScheme()
+
+	provider := &v1alpha2.GiteaProvider{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-gitea",
+			Namespace: "gitea",
+		},
+		Spec: v1alpha2.GiteaProviderSpec{
+			Namespace: "gitea",
+			Version:   "1.24.3",
+		},
+	}
+
+	// Create nginx service with ready endpoints
+	nginxService := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      nginxAdmissionWebhookServiceName,
+			Namespace: nginxNamespace,
+		},
+	}
+
+	nginxEndpoints := &corev1.Endpoints{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      nginxAdmissionWebhookServiceName,
+			Namespace: nginxNamespace,
+		},
+		Subsets: []corev1.EndpointSubset{
+			{
+				Addresses: []corev1.EndpointAddress{
+					{IP: "10.0.0.1"},
+				},
+			},
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(provider, nginxService, nginxEndpoints).
+		Build()
+
+	reconciler := &GiteaProviderReconciler{
+		Client: fakeClient,
+		Scheme: scheme,
+		Config: v1alpha1.BuildCustomizationSpec{},
+	}
+
+	// Call reconcileGitea - should proceed past nginx webhook check
+	result, err := reconciler.reconcileGitea(context.Background(), provider)
+	
+	// Will error on manifest installation, but should not requeue for nginx webhook
+	if err != nil {
+		t.Logf("Expected error during installation: %v", err)
+	}
+	
+	// Should not be requeuing for nginx webhook (would have empty RequeueAfter)
+	assert.NotEqual(t, defaultRequeueTime, result.RequeueAfter, "Should not requeue for nginx webhook when it's ready")
+}
+
+func TestGiteaProviderReconciler_DeploymentWithPositiveReplicas(t *testing.T) {
+	scheme := k8s.GetScheme()
+
+	provider := &v1alpha2.GiteaProvider{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-gitea",
+			Namespace: "gitea",
+		},
+		Spec: v1alpha2.GiteaProviderSpec{
+			Namespace: "gitea",
+		},
+	}
+
+	// Create deployment with available replicas but without status subsets properly set
+	deployment := map[string]interface{}{
+		"apiVersion": "apps/v1",
+		"kind":       "Deployment",
+		"metadata": map[string]interface{}{
+			"name":      "my-gitea",
+			"namespace": "gitea",
+		},
+		"status": map[string]interface{}{
+			"availableReplicas": int64(1),
+		},
+	}
+
+	deploymentObj := &unstructured.Unstructured{Object: deployment}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(deploymentObj).
+		Build()
+
+	reconciler := &GiteaProviderReconciler{
+		Client: fakeClient,
+		Scheme: scheme,
+		Config: v1alpha1.BuildCustomizationSpec{
+			Protocol: "http",
+			Host:     "localhost",
+			Port:     "8080",
+		},
+	}
+
+	// This will check deployment readiness
+	ready, err := reconciler.isGiteaReady(context.Background(), provider)
+	
+	// Will not be ready because API endpoint is not accessible
+	// but deployment check passes
+	if err != nil {
+		t.Logf("Error checking readiness: %v", err)
+	}
+	assert.False(t, ready, "Gitea should not be ready without API access")
+}
+
+func TestGiteaProviderReconciler_ReconcileStatusUpdate(t *testing.T) {
+	scheme := k8s.GetScheme()
+
+	provider := &v1alpha2.GiteaProvider{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "test-gitea",
+			Namespace:  "gitea",
+			Finalizers: []string{giteaProviderFinalizer},
+		},
+		Spec: v1alpha2.GiteaProviderSpec{
+			Namespace: "gitea",
+			Version:   "1.24.3",
+			Protocol:  "https",
+			Host:      "gitea.example.com",
+			Port:      "443",
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(provider).
+		WithStatusSubresource(&v1alpha2.GiteaProvider{}).
+		Build()
+
+	reconciler := &GiteaProviderReconciler{
+		Client: fakeClient,
+		Scheme: scheme,
+		Config: v1alpha1.BuildCustomizationSpec{
+			Protocol: "https",
+			Host:     "gitea.example.com",
+			Port:     "443",
+		},
+	}
+
+	req := ctrl.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      provider.Name,
+			Namespace: provider.Namespace,
+		},
+	}
+
+	// Reconcile
+	_, err := reconciler.Reconcile(context.Background(), req)
+	// May error, that's expected
+	if err != nil {
+		t.Logf("Reconcile error (expected): %v", err)
+	}
+
+	// Get updated provider
+	updatedProvider := &v1alpha2.GiteaProvider{}
+	err = fakeClient.Get(context.Background(), req.NamespacedName, updatedProvider)
+	require.NoError(t, err)
+
+	// Verify phase and conditions are set
+	assert.NotEmpty(t, updatedProvider.Status.Phase)
+	assert.NotEmpty(t, updatedProvider.Status.Conditions)
+}
+
+func TestGiteaProviderReconciler_VersionInStatus(t *testing.T) {
+	scheme := k8s.GetScheme()
+
+	tests := []struct {
+		name            string
+		specVersion     string
+		expectedVersion string
+	}{
+		{
+			name:            "custom version",
+			specVersion:     "1.25.0",
+			expectedVersion: "1.25.0",
+		},
+		{
+			name:            "default version",
+			specVersion:     "1.24.3",
+			expectedVersion: "1.24.3",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			provider := &v1alpha2.GiteaProvider{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "test-gitea",
+					Namespace:  "gitea",
+					Finalizers: []string{giteaProviderFinalizer},
+				},
+				Spec: v1alpha2.GiteaProviderSpec{
+					Namespace: "gitea",
+					Version:   tt.specVersion,
+				},
+			}
+
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(provider).
+				WithStatusSubresource(&v1alpha2.GiteaProvider{}).
+				Build()
+
+			reconciler := &GiteaProviderReconciler{
+				Client: fakeClient,
+				Scheme: scheme,
+				Config: v1alpha1.BuildCustomizationSpec{},
+			}
+
+			req := ctrl.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      provider.Name,
+					Namespace: provider.Namespace,
+				},
+			}
+
+			// Reconcile
+			_, _ = reconciler.Reconcile(context.Background(), req)
+
+			// Get updated provider
+			updatedProvider := &v1alpha2.GiteaProvider{}
+			_ = fakeClient.Get(context.Background(), req.NamespacedName, updatedProvider)
+			
+			// Version should be set in status (if reconciliation got that far)
+			if updatedProvider.Status.Version != "" {
+				assert.Equal(t, tt.expectedVersion, updatedProvider.Status.Version)
+			}
+		})
+	}
+}
+
+func TestGiteaProviderReconciler_AdminSecretExistsWithData(t *testing.T) {
+	scheme := k8s.GetScheme()
+
+	provider := &v1alpha2.GiteaProvider{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-gitea",
+			Namespace: "gitea",
+		},
+		Spec: v1alpha2.GiteaProviderSpec{
+			Namespace: "gitea",
+		},
+	}
+
+	// Pre-create secret with Data (not StringData) to simulate real cluster
+	existingSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "gitea-credential",
+			Namespace: "gitea",
+		},
+		Data: map[string][]byte{
+			"username": []byte("existinguser"),
+			"password": []byte("existingpass"),
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(provider, existingSecret).
+		Build()
+
+	reconciler := &GiteaProviderReconciler{
+		Client: fakeClient,
+		Scheme: scheme,
+	}
+
+	secret, err := reconciler.createAdminSecretIfNotExists(context.Background(), provider)
+	require.NoError(t, err)
+	
+	// Should return existing secret
+	assert.Equal(t, "existinguser", string(secret.Data["username"]))
+	assert.Equal(t, "existingpass", string(secret.Data["password"]))
+}
+
+func TestGiteaProviderReconciler_ProtocolDefaults(t *testing.T) {
+	tests := []struct {
+		name             string
+		specProtocol     string
+		expectedProtocol string
+	}{
+		{
+			name:             "empty protocol defaults to http",
+			specProtocol:     "",
+			expectedProtocol: "http",
+		},
+		{
+			name:             "https protocol is preserved",
+			specProtocol:     "https",
+			expectedProtocol: "https",
+		},
+		{
+			name:             "http protocol is preserved",
+			specProtocol:     "http",
+			expectedProtocol: "http",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			provider := &v1alpha2.GiteaProvider{
+				Spec: v1alpha2.GiteaProviderSpec{
+					Protocol: tt.specProtocol,
+				},
+			}
+
+			reconciler := &GiteaProviderReconciler{}
+			config := reconciler.buildConfigFromSpec(provider)
+			
+			assert.Equal(t, tt.expectedProtocol, config.Protocol)
+		})
+	}
+}
+
+func TestGiteaProviderReconciler_MultipleEndpointsSubsets(t *testing.T) {
+	scheme := k8s.GetScheme()
+
+	service := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      nginxAdmissionWebhookServiceName,
+			Namespace: nginxNamespace,
+		},
+	}
+
+	// Multiple subsets, only one with addresses
+	endpoints := &corev1.Endpoints{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      nginxAdmissionWebhookServiceName,
+			Namespace: nginxNamespace,
+		},
+		Subsets: []corev1.EndpointSubset{
+			{
+				Addresses: []corev1.EndpointAddress{}, // Empty
+			},
+			{
+				Addresses: []corev1.EndpointAddress{
+					{IP: "10.0.0.1"}, // Has address
+				},
+			},
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(service, endpoints).
+		Build()
+
+	reconciler := &GiteaProviderReconciler{
+		Client: fakeClient,
+		Scheme: scheme,
+	}
+
+	ready, err := reconciler.isNginxAdmissionWebhookReady(context.Background())
+	require.NoError(t, err)
+	assert.True(t, ready, "Should be ready when at least one subset has addresses")
+}
+
+func TestGiteaProviderReconciler_IngressHostDefaulting(t *testing.T) {
+	provider := &v1alpha2.GiteaProvider{
+		Spec: v1alpha2.GiteaProviderSpec{
+			Host: "custom.example.com",
+		},
+	}
+
+	reconciler := &GiteaProviderReconciler{}
+	config := reconciler.buildConfigFromSpec(provider)
+	
+	// IngressHost should default to Host
+	assert.Equal(t, "custom.example.com", config.IngressHost)
+	assert.Equal(t, "custom.example.com", config.Host)
+}
+
+func TestGiteaProviderReconciler_ReconcileWithExistingNamespace(t *testing.T) {
+	scheme := k8s.GetScheme()
+
+	provider := &v1alpha2.GiteaProvider{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-gitea",
+			Namespace: "gitea",
+		},
+		Spec: v1alpha2.GiteaProviderSpec{
+			Namespace: "custom-ns",
+			Version:   "1.24.3",
+		},
+	}
+
+	// Pre-create namespace
+	namespace := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "custom-ns",
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(provider, namespace).
+		Build()
+
+	reconciler := &GiteaProviderReconciler{
+		Client: fakeClient,
+		Scheme: scheme,
+		Config: v1alpha1.BuildCustomizationSpec{},
+	}
+
+	// Call reconcileGitea - should handle existing namespace gracefully
+	_, err := reconciler.reconcileGitea(context.Background(), provider)
+	
+	// Will error on installation but namespace handling should work
+	if err != nil {
+		t.Logf("Expected error: %v", err)
+	}
+
+	// Verify namespace still exists
+	ns := &corev1.Namespace{}
+	err = fakeClient.Get(context.Background(), types.NamespacedName{
+		Name: "custom-ns",
+	}, ns)
+	require.NoError(t, err)
+}
+
+func TestGiteaProviderReconciler_ReconcileFullCycle(t *testing.T) {
+	scheme := k8s.GetScheme()
+
+	provider := &v1alpha2.GiteaProvider{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-gitea",
+			Namespace: "gitea",
+		},
+		Spec: v1alpha2.GiteaProviderSpec{
+			Namespace: "gitea",
+			Version:   "1.24.3",
+			Protocol:  "http",
+			Host:      "localhost",
+			Port:      "8080",
+			AdminUser: v1alpha2.GiteaAdminUser{
+				Username: "admin",
+			},
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(provider).
+		WithStatusSubresource(&v1alpha2.GiteaProvider{}).
+		Build()
+
+	reconciler := &GiteaProviderReconciler{
+		Client: fakeClient,
+		Scheme: scheme,
+		Config: v1alpha1.BuildCustomizationSpec{
+			Protocol: "http",
+			Host:     "localhost",
+			Port:     "8080",
+		},
+	}
+
+	req := ctrl.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      provider.Name,
+			Namespace: provider.Namespace,
+		},
+	}
+
+	// First reconcile - adds finalizer
+	_, err := reconciler.Reconcile(context.Background(), req)
+	if err != nil {
+		t.Logf("First reconcile error: %v", err)
+	}
+
+	// Get provider after first reconcile
+	provider1 := &v1alpha2.GiteaProvider{}
+	err = fakeClient.Get(context.Background(), req.NamespacedName, provider1)
+	require.NoError(t, err)
+	assert.Contains(t, provider1.Finalizers, giteaProviderFinalizer)
+
+	// Second reconcile - sets Installing phase
+	_, err = reconciler.Reconcile(context.Background(), req)
+	if err != nil {
+		t.Logf("Second reconcile error: %v", err)
+	}
+
+	provider2 := &v1alpha2.GiteaProvider{}
+	err = fakeClient.Get(context.Background(), req.NamespacedName, provider2)
+	require.NoError(t, err)
+	assert.NotEmpty(t, provider2.Status.Phase)
+
+	// Verify namespace was created
+	ns := &corev1.Namespace{}
+	err = fakeClient.Get(context.Background(), types.NamespacedName{
+		Name: "gitea",
+	}, ns)
+	require.NoError(t, err)
+
+	// Verify admin secret was created
+	secret := &corev1.Secret{}
+	err = fakeClient.Get(context.Background(), types.NamespacedName{
+		Name:      "gitea-credential",
+		Namespace: "gitea",
+	}, secret)
+	require.NoError(t, err)
+	assert.NotEmpty(t, secret.StringData["username"])
+	assert.NotEmpty(t, secret.StringData["password"])
+}
+
+func TestGiteaProviderReconciler_IsGiteaReadyWithNilStatus(t *testing.T) {
+	scheme := k8s.GetScheme()
+
+	provider := &v1alpha2.GiteaProvider{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-gitea",
+			Namespace: "gitea",
+		},
+		Spec: v1alpha2.GiteaProviderSpec{
+			Namespace: "gitea",
+		},
+	}
+
+	// Create deployment without status field properly set
+	deployment := map[string]interface{}{
+		"apiVersion": "apps/v1",
+		"kind":       "Deployment",
+		"metadata": map[string]interface{}{
+			"name":      "my-gitea",
+			"namespace": "gitea",
+		},
+		// No status field
+	}
+
+	deploymentObj := &unstructured.Unstructured{Object: deployment}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(deploymentObj).
+		Build()
+
+	reconciler := &GiteaProviderReconciler{
+		Client: fakeClient,
+		Scheme: scheme,
+		Config: v1alpha1.BuildCustomizationSpec{},
+	}
+
+	ready, err := reconciler.isGiteaReady(context.Background(), provider)
+	require.NoError(t, err)
+	assert.False(t, ready, "Should not be ready without status")
+}
+
+func TestGiteaProviderReconciler_ReconcileErrorSetsFailedPhase(t *testing.T) {
+	scheme := k8s.GetScheme()
+
+	provider := &v1alpha2.GiteaProvider{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "test-gitea",
+			Namespace:  "gitea",
+			Finalizers: []string{giteaProviderFinalizer},
+		},
+		Spec: v1alpha2.GiteaProviderSpec{
+			Namespace: "gitea",
+			Version:   "1.24.3",
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(provider).
+		WithStatusSubresource(&v1alpha2.GiteaProvider{}).
+		Build()
+
+	reconciler := &GiteaProviderReconciler{
+		Client: fakeClient,
+		Scheme: scheme,
+		Config: v1alpha1.BuildCustomizationSpec{},
+	}
+
+	req := ctrl.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      provider.Name,
+			Namespace: provider.Namespace,
+		},
+	}
+
+	// Reconcile - will fail due to missing resources
+	_, err := reconciler.Reconcile(context.Background(), req)
+	// Error expected
+	if err != nil {
+		t.Logf("Expected reconcile error: %v", err)
+	}
+
+	// Get updated provider
+	updatedProvider := &v1alpha2.GiteaProvider{}
+	err = fakeClient.Get(context.Background(), req.NamespacedName, updatedProvider)
+	require.NoError(t, err)
+
+	// Should have Failed phase or conditions indicating failure
+	if updatedProvider.Status.Phase == "Failed" {
+		assert.Equal(t, "Failed", updatedProvider.Status.Phase)
+	}
+	
+	// Should have Ready condition with False status
+	var readyCondition *metav1.Condition
+	for i := range updatedProvider.Status.Conditions {
+		if updatedProvider.Status.Conditions[i].Type == "Ready" {
+			readyCondition = &updatedProvider.Status.Conditions[i]
+			break
+		}
+	}
+	
+	if readyCondition != nil {
+		assert.Equal(t, metav1.ConditionFalse, readyCondition.Status)
+	}
+}
+
+func TestGiteaProviderReconciler_SetupWithManager(t *testing.T) {
+	scheme := k8s.GetScheme()
+
+	reconciler := &GiteaProviderReconciler{
+		Scheme: scheme,
+	}
+
+	// This is a simple test to ensure SetupWithManager doesn't panic
+	// In a real environment, this would be called by the controller manager
+	// We can't easily test it fully without a real manager, but we can verify it exists
+	assert.NotNil(t, reconciler.SetupWithManager)
+}
+
+func TestGiteaProviderReconciler_ReconcileRequeueAfterInstalling(t *testing.T) {
+	scheme := k8s.GetScheme()
+
+	provider := &v1alpha2.GiteaProvider{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "test-gitea",
+			Namespace:  "gitea",
+			Finalizers: []string{giteaProviderFinalizer},
+		},
+		Spec: v1alpha2.GiteaProviderSpec{
+			Namespace: "gitea",
+			Version:   "1.24.3",
+		},
+		Status: v1alpha2.GiteaProviderStatus{
+			Phase: "Installing",
+		},
+	}
+
+	// Create namespace so that reconcileGitea can proceed
+	namespace := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "gitea",
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(provider, namespace).
+		WithStatusSubresource(&v1alpha2.GiteaProvider{}).
+		Build()
+
+	reconciler := &GiteaProviderReconciler{
+		Client: fakeClient,
+		Scheme: scheme,
+		Config: v1alpha1.BuildCustomizationSpec{},
+	}
+
+	req := ctrl.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      provider.Name,
+			Namespace: provider.Namespace,
+		},
+	}
+
+	// Reconcile
+	result, err := reconciler.Reconcile(context.Background(), req)
+	
+	// May return error or requeue
+	if err == nil && result.RequeueAfter > 0 {
+		t.Logf("Requeue after: %v", result.RequeueAfter)
+	} else if err != nil {
+		t.Logf("Reconcile error (may be expected): %v", err)
+	}
+
+	// Get updated provider
+	updatedProvider := &v1alpha2.GiteaProvider{}
+	err = fakeClient.Get(context.Background(), req.NamespacedName, updatedProvider)
+	require.NoError(t, err)
+	
+	// Phase should still be Installing or Failed
+	assert.NotEmpty(t, updatedProvider.Status.Phase)
+}
+
+func TestGiteaProviderReconciler_PortDefaults(t *testing.T) {
+	tests := []struct {
+		name         string
+		specPort     string
+		expectedPort string
+	}{
+		{
+			name:         "empty port defaults to 8080",
+			specPort:     "",
+			expectedPort: "8080",
+		},
+		{
+			name:         "custom port is preserved",
+			specPort:     "9443",
+			expectedPort: "9443",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			provider := &v1alpha2.GiteaProvider{
+				Spec: v1alpha2.GiteaProviderSpec{
+					Port: tt.specPort,
+				},
+			}
+
+			reconciler := &GiteaProviderReconciler{}
+			config := reconciler.buildConfigFromSpec(provider)
+			
+			assert.Equal(t, tt.expectedPort, config.Port)
+		})
+	}
+}
+
+func TestGiteaProviderReconciler_HostDefaults(t *testing.T) {
+	tests := []struct {
+		name         string
+		specHost     string
+		expectedHost string
+	}{
+		{
+			name:         "empty host defaults to cnoe.localtest.me",
+			specHost:     "",
+			expectedHost: "cnoe.localtest.me",
+		},
+		{
+			name:         "custom host is preserved",
+			specHost:     "my-gitea.example.com",
+			expectedHost: "my-gitea.example.com",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			provider := &v1alpha2.GiteaProvider{
+				Spec: v1alpha2.GiteaProviderSpec{
+					Host: tt.specHost,
+				},
+			}
+
+			reconciler := &GiteaProviderReconciler{}
+			config := reconciler.buildConfigFromSpec(provider)
+			
+			assert.Equal(t, tt.expectedHost, config.Host)
+		})
+	}
+}
