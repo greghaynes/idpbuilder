@@ -183,6 +183,12 @@ func (r *GiteaProviderReconciler) reconcileGitea(ctx context.Context, provider *
 		return ctrl.Result{}, fmt.Errorf("ensuring namespace: %w", err)
 	}
 
+	// Ensure admin secret exists BEFORE installing Gitea resources
+	// The deployment references this secret in environment variables
+	if err := r.ensureAdminSecretWithoutToken(ctx, provider); err != nil {
+		return ctrl.Result{}, fmt.Errorf("ensuring admin secret: %w", err)
+	}
+
 	// Check if nginx admission webhook is ready before creating Ingress resources
 	// This prevents race condition where Gitea tries to create Ingress before webhook is available
 	ready, err := r.isNginxAdmissionWebhookReady(ctx)
@@ -401,6 +407,56 @@ func (r *GiteaProviderReconciler) ensureAdminSecret(ctx context.Context, provide
 	}
 
 	return secret, nil
+}
+
+// ensureAdminSecretWithoutToken creates the admin secret with username and password only
+// This should be called BEFORE installing Gitea resources since the deployment references this secret
+func (r *GiteaProviderReconciler) ensureAdminSecretWithoutToken(ctx context.Context, provider *v1alpha2.GiteaProvider) error {
+	logger := log.FromContext(ctx)
+
+	secretName := util.GiteaAdminSecret
+	secretNamespace := provider.Spec.Namespace
+
+	secret := &corev1.Secret{}
+	err := r.Get(ctx, types.NamespacedName{
+		Namespace: secretNamespace,
+		Name:      secretName,
+	}, secret)
+
+	if err != nil {
+		if errors.IsNotFound(err) {
+			// Create new secret with generated password
+			genPassword, err := util.GeneratePassword()
+			if err != nil {
+				return fmt.Errorf("generating password: %w", err)
+			}
+
+			username := provider.Spec.AdminUser.Username
+			if username == "" {
+				username = "giteaAdmin"
+			}
+
+			secret = &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      secretName,
+					Namespace: secretNamespace,
+				},
+				StringData: map[string]string{
+					"username": username,
+					"password": genPassword,
+				},
+			}
+
+			if err := r.Create(ctx, secret); err != nil {
+				return fmt.Errorf("creating admin secret: %w", err)
+			}
+			logger.Info("Created Gitea admin secret", "name", secretName)
+		} else {
+			return fmt.Errorf("getting admin secret: %w", err)
+		}
+	}
+
+	return nil
 }
 
 // handleDeletion handles cleanup when GiteaProvider is deleted
