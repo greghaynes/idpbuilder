@@ -399,8 +399,8 @@ func (r *GiteaProviderReconciler) ensureAdminSecret(ctx context.Context, provide
 
 		// Update secret with token
 		u := &unstructured.Unstructured{}
-		u.SetName(util.GiteaAdminSecret)
-		u.SetNamespace(provider.Spec.Namespace)
+		u.SetName(secret.Name)
+		u.SetNamespace(secret.Namespace)
 		u.SetGroupVersionKind(corev1.SchemeGroupVersion.WithKind("Secret"))
 
 		if err := unstructured.SetNestedField(u.Object, encodedToken, "data", util.GiteaAdminTokenFieldName); err != nil {
@@ -412,7 +412,7 @@ func (r *GiteaProviderReconciler) ensureAdminSecret(ctx context.Context, provide
 		}
 
 		// Refetch secret
-		if err := r.Get(ctx, types.NamespacedName{Namespace: provider.Spec.Namespace, Name: util.GiteaAdminSecret}, secret); err != nil {
+		if err := r.Get(ctx, types.NamespacedName{Namespace: secret.Namespace, Name: secret.Name}, secret); err != nil {
 			return nil, err
 		}
 	}
