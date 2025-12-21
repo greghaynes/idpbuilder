@@ -20,10 +20,10 @@ func TestReconcileGitRepoValidation(t *testing.T) {
 	_ = v1alpha2.AddToScheme(scheme)
 
 	tests := []struct {
-		name           string
-		giteaProvider  *v1alpha2.GiteaProvider
-		expectError    bool
-		errorContains  string
+		name          string
+		giteaProvider *v1alpha2.GiteaProvider
+		expectError   bool
+		errorContains string
 	}{
 		{
 			name: "valid endpoints",
@@ -121,6 +121,27 @@ func TestReconcileGitRepoValidation(t *testing.T) {
 				},
 				Status: v1alpha2.GiteaProviderStatus{
 					Endpoint:         "http://",
+					InternalEndpoint: "http://gitea.svc.cluster.local:3000",
+					Conditions: []metav1.Condition{
+						{
+							Type:   "Ready",
+							Status: metav1.ConditionTrue,
+						},
+					},
+				},
+			},
+			expectError:   true,
+			errorContains: "endpoint is too short",
+		},
+		{
+			name: "invalid endpoint - https too short",
+			giteaProvider: &v1alpha2.GiteaProvider{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "localdev-gitea",
+					Namespace: util.GiteaNamespace,
+				},
+				Status: v1alpha2.GiteaProviderStatus{
+					Endpoint:         "https://",
 					InternalEndpoint: "http://gitea.svc.cluster.local:3000",
 					Conditions: []metav1.Condition{
 						{

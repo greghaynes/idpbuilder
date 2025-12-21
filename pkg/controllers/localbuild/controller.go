@@ -701,10 +701,11 @@ func (r *LocalbuildReconciler) reconcileGitRepo(ctx context.Context, resource *v
 	if !strings.HasPrefix(gitProviderStatus.Endpoint, "http://") && !strings.HasPrefix(gitProviderStatus.Endpoint, "https://") {
 		return nil, fmt.Errorf("GiteaProvider endpoint must start with http:// or https://, got: %s", gitProviderStatus.Endpoint)
 	}
-	if len(gitProviderStatus.Endpoint) <= len("http://") {
+	// Check that there's content after the protocol (e.g., not just "http://" or "https://")
+	if gitProviderStatus.Endpoint == "http://" || gitProviderStatus.Endpoint == "https://" {
 		return nil, fmt.Errorf("GiteaProvider endpoint is too short: %s", gitProviderStatus.Endpoint)
 	}
-	
+
 	if gitProviderStatus.InternalEndpoint == "" {
 		return nil, fmt.Errorf("GiteaProvider internal endpoint is not set")
 	}
@@ -712,7 +713,8 @@ func (r *LocalbuildReconciler) reconcileGitRepo(ctx context.Context, resource *v
 	if !strings.HasPrefix(gitProviderStatus.InternalEndpoint, "http://") && !strings.HasPrefix(gitProviderStatus.InternalEndpoint, "https://") {
 		return nil, fmt.Errorf("GiteaProvider internal endpoint must start with http:// or https://, got: %s", gitProviderStatus.InternalEndpoint)
 	}
-	if len(gitProviderStatus.InternalEndpoint) <= len("http://") {
+	// Check that there's content after the protocol
+	if gitProviderStatus.InternalEndpoint == "http://" || gitProviderStatus.InternalEndpoint == "https://" {
 		return nil, fmt.Errorf("GiteaProvider internal endpoint is too short: %s", gitProviderStatus.InternalEndpoint)
 	}
 
