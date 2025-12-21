@@ -101,9 +101,15 @@ func (r *ArgoCDProviderReconciler) installArgoCD(ctx context.Context, argocdProv
 		return fmt.Errorf("failed to ensure namespace: %w", err)
 	}
 
+	// Retrieve template data for ArgoCD manifests
+	templateData, err := r.getTemplateData(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get template data: %w", err)
+	}
+
 	// Load and apply embedded manifests from localbuild resources
 	// Reuse the same ArgoCD installation manifests from localbuild package
-	installObjs, err := k8s.BuildCustomizedObjects("", "resources/argo", localbuild.GetArgoFS(), r.Scheme, nil)
+	installObjs, err := k8s.BuildCustomizedObjects("", "resources/argo", localbuild.GetArgoFS(), r.Scheme, templateData)
 	if err != nil {
 		return fmt.Errorf("failed to build argocd manifests: %w", err)
 	}
@@ -117,6 +123,57 @@ func (r *ArgoCDProviderReconciler) installArgoCD(ctx context.Context, argocdProv
 
 	logger.Info("ArgoCD resources created successfully")
 	return nil
+}
+
+// getTemplateData retrieves the BuildCustomizationSpec data needed for ArgoCD template rendering
+func (r *ArgoCDProviderReconciler) getTemplateData(ctx context.Context) (interface{}, error) {
+	logger := log.FromContext(ctx)
+
+	// Retrieve the self-signed certificate from the ConfigMap
+	secret := &corev1.Secret{}
+	err := r.Get(ctx, types.NamespacedName{
+		Name:      globals.SelfSignedCertCMName,
+		Namespace: corev1.NamespaceDefault,
+	}, secret)
+
+	var selfSignedCert string
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			logger.Info("Self-signed certificate ConfigMap not found, ArgoCD will be installed without TLS certificates")
+			selfSignedCert = ""
+		} else {
+			return nil, fmt.Errorf("failed to get self-signed certificate: %w", err)
+		}
+	} else {
+		certData, ok := secret.Data[globals.SelfSignedCertCMKeyName]
+		if !ok {
+			logger.Info("Certificate data not found in ConfigMap, ArgoCD will be installed without TLS certificates")
+			selfSignedCert = ""
+		} else {
+			selfSignedCert = string(certData)
+		}
+	}
+
+	// Import the v1alpha1 API to use BuildCustomizationSpec
+	templateData := struct {
+		Protocol       string
+		Host           string
+		IngressHost    string
+		Port           string
+		UsePathRouting bool
+		SelfSignedCert string
+		StaticPassword bool
+	}{
+		Protocol:       "https",
+		Host:           globals.DefaultHostName,
+		IngressHost:    globals.DefaultHostName,
+		Port:           "8443",
+		UsePathRouting: false,
+		SelfSignedCert: selfSignedCert,
+		StaticPassword: false,
+	}
+
+	return templateData, nil
 }
 
 func (r *ArgoCDProviderReconciler) ensureAdminCredentials(ctx context.Context, argocdProvider *v1alpha2.ArgoCDProvider) error {
