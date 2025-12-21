@@ -36,7 +36,10 @@ const (
 	extraPackagesUsage             = "Paths to locations containing custom packages"
 	packageCustomizationFilesUsage = "Name of the package and the path to file to customize the core packages with. " +
 		"valid package names are: argocd, nginx, and gitea. e.g. argocd:/tmp/argocd.yaml"
-	noExitUsage = "When set, idpbuilder will not exit after all packages are synced. Useful for continuously syncing local directories."
+	noExitUsage         = "When set, idpbuilder will not exit after all packages are synced. Useful for continuously syncing local directories."
+	statusOutputUsage   = "Status output mode. Supported values: auto (default), simple, verbose, none. 'auto' uses inline status in terminals, 'simple' shows status without inline updates, 'verbose' shows detailed logs, 'none' disables status output."
+	noColorUsage        = "Disable colored output for both logs and status reporting."
+	quietUsage          = "Suppress status output (equivalent to --status-output=none)."
 )
 
 var (
@@ -56,6 +59,9 @@ var (
 	ingressHost               string
 	port                      string
 	pathRouting               bool
+	statusOutput              string
+	noColor                   bool
+	quiet                     bool
 )
 
 var CreateCmd = &cobra.Command{
@@ -90,6 +96,11 @@ func init() {
 	CreateCmd.Flags().StringSliceVarP(&packageCustomizationFiles, "package-custom-file", "c", []string{}, packageCustomizationFilesUsage)
 	// idpbuilder related flags
 	CreateCmd.Flags().BoolVarP(&noExit, "no-exit", "n", true, noExitUsage)
+	
+	// status and output related flags
+	CreateCmd.Flags().StringVar(&statusOutput, "status-output", "auto", statusOutputUsage)
+	CreateCmd.Flags().BoolVar(&noColor, "no-color", false, noColorUsage)
+	CreateCmd.Flags().BoolVarP(&quiet, "quiet", "q", false, quietUsage)
 }
 
 func preCreateE(cmd *cobra.Command, args []string) error {
@@ -150,13 +161,39 @@ func create(cmd *cobra.Command, args []string) error {
 		maybeRegistryConfig = registryConfig
 	}
 
-	// Create status reporter
-	reporter := status.NewReporter(helpers.ColoredOutput)
-	reporter.AddStep("cluster", "Creating Kubernetes cluster")
-	reporter.AddStep("crds", "Installing Custom Resource Definitions")
-	reporter.AddStep("networking", "Configuring networking and certificates")
-	reporter.AddStep("resources", "Creating platform resources")
-	reporter.AddStep("packages", "Installing and syncing packages")
+	// Determine if color should be enabled
+	// Priority: --no-color flag > --color flag > default
+	useColor := helpers.ColoredOutput
+	if noColor {
+		useColor = false
+	}
+
+	// Determine status output mode
+	// Priority: --quiet flag > --status-output flag > default
+	statusMode := statusOutput
+	if quiet {
+		statusMode = "none"
+	}
+
+	// Validate status output mode
+	validModes := map[string]bool{"auto": true, "simple": true, "verbose": true, "none": true}
+	if !validModes[statusMode] {
+		return fmt.Errorf("invalid status-output value: %s. Supported values are: auto, simple, verbose, none", statusMode)
+	}
+
+	// Create status reporter based on mode
+	var reporter *status.Reporter
+	if statusMode != "none" && statusMode != "verbose" {
+		reporter = status.NewReporter(useColor)
+		if statusMode == "simple" {
+			reporter.SetSimpleMode(true)
+		}
+		reporter.AddStep("cluster", "Creating Kubernetes cluster")
+		reporter.AddStep("crds", "Installing Custom Resource Definitions")
+		reporter.AddStep("networking", "Configuring networking and certificates")
+		reporter.AddStep("resources", "Creating platform resources")
+		reporter.AddStep("packages", "Installing and syncing packages")
+	}
 
 	opts := build.NewBuildOptions{
 		Name:              buildName,
@@ -189,16 +226,22 @@ func create(cmd *cobra.Command, args []string) error {
 	b := build.NewBuild(opts)
 
 	if err := b.Run(ctx, recreateCluster); err != nil {
-		reporter.Summary()
+		if reporter != nil {
+			reporter.Summary()
+		}
 		return err
 	}
 
 	if cmd.Context().Err() != nil {
-		reporter.Summary()
+		if reporter != nil {
+			reporter.Summary()
+		}
 		return context.Cause(cmd.Context())
 	}
 
-	reporter.Summary()
+	if reporter != nil {
+		reporter.Summary()
+	}
 	printSuccessMsg()
 	return nil
 }

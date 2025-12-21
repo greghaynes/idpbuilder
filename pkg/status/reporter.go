@@ -52,16 +52,25 @@ type Reporter struct {
 	writer     io.Writer
 	mu         sync.Mutex
 	colored    bool
+	simpleMode bool
 	lastOutput string
 }
 
 // NewReporter creates a new status reporter
 func NewReporter(colored bool) *Reporter {
 	return &Reporter{
-		steps:   []Step{},
-		writer:  os.Stdout,
-		colored: colored,
+		steps:      []Step{},
+		writer:     os.Stdout,
+		colored:    colored,
+		simpleMode: false,
 	}
+}
+
+// SetSimpleMode enables or disables simple mode (no inline updates)
+func (r *Reporter) SetSimpleMode(simple bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.simpleMode = simple
 }
 
 // AddStep adds a new step to the workflow
@@ -127,6 +136,13 @@ func (r *Reporter) FailStep(name string, err error) {
 // render updates the display with current status
 func (r *Reporter) render() {
 	isTerminal := r.isTerminal()
+	
+	// In simple mode, only output on state changes, no inline updates
+	if r.simpleMode {
+		output := r.buildSimpleOutput()
+		fmt.Fprint(r.writer, output)
+		return
+	}
 
 	// Clear previous output if in interactive mode
 	// Count the actual lines that need to be cleared
@@ -178,6 +194,34 @@ func (r *Reporter) buildOutput() string {
 	}
 
 	return output
+}
+
+// buildSimpleOutput creates simple status output (one line per state change)
+func (r *Reporter) buildSimpleOutput() string {
+	// Only show the current step that changed
+	if r.currentIdx >= 0 && r.currentIdx < len(r.steps) {
+		step := r.steps[r.currentIdx]
+		symbol := r.getSymbol(step.State)
+		color := r.getColor(step.State)
+		
+		status := ""
+		if step.State == StateRunning {
+			status = "..."
+		} else if step.State == StateComplete && !step.EndTime.IsZero() && !step.StartTime.IsZero() {
+			duration := step.EndTime.Sub(step.StartTime).Round(time.Millisecond)
+			status = fmt.Sprintf(" (%s)", duration)
+		} else if step.State == StateFailed {
+			status = " (failed)"
+		}
+		
+		return fmt.Sprintf("%s%s%s %s%s\n",
+			r.color(color),
+			symbol,
+			r.color(Reset),
+			step.Description,
+			status)
+	}
+	return ""
 }
 
 // getSymbol returns the symbol for a state
