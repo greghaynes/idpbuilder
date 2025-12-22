@@ -24,9 +24,9 @@ func (m *mockObject) DeepCopyObject() runtime.Object {
 
 func TestGetPlatformOwnerReference(t *testing.T) {
 	tests := []struct {
-		name     string
+		name      string
 		ownerRefs []metav1.OwnerReference
-		want     *metav1.OwnerReference
+		want      *metav1.OwnerReference
 	}{
 		{
 			name:      "no owner references",
