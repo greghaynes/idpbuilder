@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="IDP Builder API Reference - Custom Resource Definitions (CRDs)">
+    <title>API Reference | IDP Builder</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <style>
+        .docs-container {
+            display: grid;
+            grid-template-columns: 250px 1fr;
+            gap: 2rem;
+            margin-top: 2rem;
+        }
+        .docs-sidebar {
+            position: sticky;
+            top: 80px;
+            height: fit-content;
+            max-height: calc(100vh - 80px);
+            overflow-y: auto;
+        }
+        .docs-sidebar h3 {
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            margin-top: 1.5rem;
+            margin-bottom: 0.5rem;
+            padding-left: 0.5rem;
+        }
+        .docs-sidebar h3:first-child {
+            margin-top: 0;
+        }
+        .docs-sidebar ul {
+            list-style: none;
+            padding: 0;
+        }
+        .docs-sidebar li {
+            margin-bottom: 0.5rem;
+        }
+        .docs-sidebar a {
+            text-decoration: none;
+            color: var(--text-color);
+            padding: 0.5rem;
+            display: block;
+            border-radius: 4px;
+            transition: background-color 0.3s;
+            font-size: 0.95rem;
+        }
+        .docs-sidebar a:hover,
+        .docs-sidebar a.active {
+            background-color: var(--bg-alt);
+            color: var(--primary-color);
+        }
+        .docs-content {
+            max-width: 800px;
+            width: 100%;
+        }
+        .docs-content h1 {
+            margin-bottom: 1rem;
+        }
+        .docs-content h2 {
+            margin-top: 2rem;
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid var(--border-color);
+        }
+        .docs-content p {
+            margin-bottom: 1rem;
+        }
+        .docs-content ul {
+            margin-bottom: 1rem;
+            padding-left: 2rem;
+        }
+        .api-card {
+            background-color: var(--bg-alt);
+            padding: 1.5rem;
+            border-radius: 5px;
+            margin-bottom: 1.5rem;
+        }
+        .api-card h3 {
+            margin-top: 0;
+            margin-bottom: 0.5rem;
+        }
+        .api-card p {
+            margin-bottom: 0.5rem;
+        }
+        .api-card code {
+            background-color: var(--bg-color);
+            padding: 0.2rem 0.4rem;
+            border-radius: 3px;
+            font-size: 0.9em;
+        }
+        @media (max-width: 768px) {
+            .docs-container {
+                grid-template-columns: 1fr;
+            }
+            .docs-sidebar {
+                position: relative;
+                top: 0;
+                background-color: var(--bg-alt);
+                padding: 1rem;
+                border-radius: 5px;
+                margin-bottom: 1rem;
+            }
+            .docs-sidebar h3 {
+                margin-top: 0;
+            }
+            .docs-content {
+                max-width: 100%;
+                overflow-x: hidden;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <nav class="container">
+            <div class="logo">
+                <h1>IDP Builder</h1>
+            </div>
+            <button class="menu-toggle" aria-label="Toggle menu" onclick="toggleMenu()">
+                ☰
+            </button>
+            <ul class="nav-links" id="navLinks">
+                <li><a href="/">Home</a></li>
+                <li><a href="/docs">Docs</a></li>
+                <li><a href="/docs/examples.html">Examples</a></li>
+                <li><a href="https://github.com/cnoe-io/idpbuilder" target="_blank" rel="noopener">GitHub</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <main class="container">
+        <div class="docs-container">
+            <aside class="docs-sidebar">
+                <h3>API Reference</h3>
+                <ul>
+                    <li><a href="/docs/api.html" class="active">Overview</a></li>
+                    <li><a href="/docs/api/reference.html">CRD Reference</a></li>
+                </ul>
+                
+                <h3>Documentation</h3>
+                <ul>
+                    <li><a href="/docs">Docs Home</a></li>
+                    <li><a href="/docs/examples.html">Examples</a></li>
+                </ul>
+            </aside>
+
+            <article class="docs-content">
+                <h1>API Reference</h1>
+                <p>IDP Builder provides several Custom Resource Definitions (CRDs) that allow you to declaratively manage your internal developer platform on Kubernetes.</p>
+                
+                <div style="background-color: var(--bg-alt); padding: 1rem; border-radius: 5px; margin-bottom: 2rem;">
+                    <h3 style="margin-top: 0;">📖 About This Documentation</h3>
+                    <p style="margin-bottom: 0;">This API reference is automatically generated from the Go source code using standard Kubernetes tooling (<code>crd-ref-docs</code>). It provides detailed information about all fields, types, and validation rules for each Custom Resource.</p>
+                </div>
+
+                <h2>API Versions</h2>
+                <p>IDP Builder provides two API versions:</p>
+                
+                <div class="api-card">
+                    <h3>v1alpha1</h3>
+                    <p><strong>Status:</strong> Deprecated (transitioning to v1alpha2)</p>
+                    <p>The original API version with monolithic resources. Includes:</p>
+                    <ul>
+                        <li><code>Localbuild</code> - Legacy all-in-one resource</li>
+                        <li><code>CustomPackage</code> - Package management</li>
+                        <li><code>GitRepository</code> - Git repository management</li>
+                    </ul>
+                </div>
+
+                <div class="api-card">
+                    <h3>v1alpha2</h3>
+                    <p><strong>Status:</strong> Current (recommended)</p>
+                    <p>The new modular architecture with pluggable providers. Includes:</p>
+                    <ul>
+                        <li><code>Platform</code> - Main platform orchestration resource</li>
+                        <li><code>GiteaProvider</code> - In-cluster Git server provider</li>
+                        <li><code>NginxGateway</code> - Nginx Ingress gateway provider</li>
+                        <li><code>ArgoCDProvider</code> - ArgoCD GitOps provider</li>
+                    </ul>
+                </div>
+
+                <h2>Custom Resources</h2>
+                
+                <h3>Platform (v1alpha2)</h3>
+                <p>The <code>Platform</code> resource is the main entry point for defining your IDP. It orchestrates multiple providers and manages the overall platform lifecycle.</p>
+                <p><strong>Key Features:</strong></p>
+                <ul>
+                    <li>References multiple provider types (Git, Gateway, GitOps)</li>
+                    <li>Manages platform-wide configuration</li>
+                    <li>Provides status information about component health</li>
+                </ul>
+                <p><a href="/docs/api/reference.html#platform">View detailed Platform API reference →</a></p>
+
+                <h3>Provider Resources (v1alpha2)</h3>
+                <p>Provider resources represent specific platform components that can be plugged into a Platform:</p>
+                
+                <div class="api-card">
+                    <h4>GiteaProvider</h4>
+                    <p>Deploys and manages an in-cluster Gitea Git server with automatic configuration for repositories, organizations, and users.</p>
+                    <p><a href="/docs/api/reference.html#giteaprovider">View GiteaProvider reference →</a></p>
+                </div>
+
+                <div class="api-card">
+                    <h4>NginxGateway</h4>
+                    <p>Deploys and configures Nginx Ingress Controller for routing traffic to platform components.</p>
+                    <p><a href="/docs/api/reference.html#nginxgateway">View NginxGateway reference →</a></p>
+                </div>
+
+                <div class="api-card">
+                    <h4>ArgoCDProvider</h4>
+                    <p>Deploys and configures ArgoCD for GitOps-based application deployment and management.</p>
+                    <p><a href="/docs/api/reference.html#argocdprovider">View ArgoCDProvider reference →</a></p>
+                </div>
+
+                <h2>Using the API</h2>
+                <p>You can create these resources in two ways:</p>
+                
+                <h3>1. Using the CLI (Development Mode)</h3>
+                <p>The CLI automatically creates appropriate resources based on your requirements:</p>
+                <pre><code>idpbuilder create</code></pre>
+                
+                <h3>2. Declaratively via kubectl (Production Mode)</h3>
+                <p>Create resources directly in your Kubernetes cluster:</p>
+                <pre><code>kubectl apply -f platform.yaml</code></pre>
+
+                <h2>Examples</h2>
+                <p>For example YAML configurations, see the <a href="/docs/examples.html">Examples section</a>:</p>
+                <ul>
+                    <li><a href="/docs/examples/platform-simple.html">Simple Platform</a></li>
+                    <li><a href="/docs/examples/v1alpha2/platform-with-gateway.html">Platform with Gateway</a></li>
+                    <li><a href="/docs/examples/v1alpha2/giteaprovider.html">GiteaProvider</a></li>
+                </ul>
+
+                <h2>Complete Reference</h2>
+                <p>For complete field-level documentation, see the <a href="/docs/api/reference.html">Full CRD Reference Documentation</a>.</p>
+            </article>
+        </div>
+    </main>
+
+    <footer>
+        <div class="container">
+            <p>&copy; 2024 CNOE IDP Builder. Licensed under <a href="https://github.com/cnoe-io/idpbuilder/blob/main/LICENSE" target="_blank" rel="noopener">Apache License 2.0</a></p>
+        </div>
+    </footer>
+
+    <script>
+        function toggleMenu() {
+            const navLinks = document.getElementById('navLinks');
+            navLinks.classList.toggle('active');
+        }
+
+        // Close menu when clicking outside
+        document.addEventListener('click', function(event) {
+            const nav = document.querySelector('nav');
+            const navLinks = document.getElementById('navLinks');
+            
+            if (!nav.contains(event.target)) {
+                navLinks.classList.remove('active');
+            }
+        });
+    </script>
+</body>
+</html>

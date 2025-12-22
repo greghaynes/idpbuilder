@@ -311,7 +311,8 @@ const main = () => {
   const categories = [
     { dir: 'specs', title: 'Technical Specifications' },
     { dir: 'implementation', title: 'Implementation Documentation' },
-    { dir: 'user', title: 'User Guides' }
+    { dir: 'user', title: 'User Guides' },
+    { dir: 'api', title: 'API Reference' }
   ];
   
   categories.forEach(({ dir, title }) => {

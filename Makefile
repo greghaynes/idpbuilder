@@ -23,10 +23,12 @@ ENVTEST ?= $(LOCALBIN)/setup-envtest
 KUSTOMIZE ?= $(LOCALBIN)/kustomize
 HELM_TGZ ?= $(LOCALBIN)/helm.tar.gz
 HELM ?= $(LOCALBIN)/helm
+CRD_REF_DOCS ?= $(LOCALBIN)/crd-ref-docs
 
 ## Tool Versions
 CONTROLLER_TOOLS_VERSION ?= v0.20.0
 KUSTOMIZE_VERSION ?= v5.5.0
+CRD_REF_DOCS_VERSION ?= v0.1.0
 
 .PHONY: fmt
 fmt: ## Run go fmt against code.
@@ -119,6 +121,19 @@ endif
 envtest: $(ENVTEST) ## Download envtest-setup locally if necessary.
 $(ENVTEST): $(LOCALBIN)
 	test -s $(LOCALBIN)/setup-envtest || GOBIN=$(LOCALBIN) go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
+
+.PHONY: crd-ref-docs
+crd-ref-docs: $(CRD_REF_DOCS) ## Download crd-ref-docs locally if necessary.
+$(CRD_REF_DOCS): $(LOCALBIN)
+	test -s $(LOCALBIN)/crd-ref-docs || GOBIN=$(LOCALBIN) go install github.com/elastic/crd-ref-docs@$(CRD_REF_DOCS_VERSION)
+
+.PHONY: api-docs
+api-docs: crd-ref-docs ## Generate API reference documentation from CRDs.
+	$(CRD_REF_DOCS) \
+		--source-path=./api \
+		--config=./hack/api-docs-config.yaml \
+		--renderer=markdown \
+		--output-path=./docs/api/reference.md
 
 .PHONY: embedded-resources
 embedded-resources: kustomize helm
