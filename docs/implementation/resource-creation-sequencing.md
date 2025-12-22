@@ -848,6 +848,389 @@ func TestPlatformToProviderSequencing(t *testing.T) {
 }
 ```
 
+## Client Resource Tracking Implementation
+
+This section describes how the platform controller tracks provider statuses and how the CLI monitors the platform to display status to users.
+
+### Platform Controller Provider Status Tracking
+
+The Platform controller is responsible for tracking the ready status of all providers it references and aggregating this information into the Platform resource's status fields.
+
+#### Provider Discovery and Reference
+
+The Platform controller discovers providers through the Platform CR's spec:
+
+```go
+// api/v1alpha2/platform_types.go
+type PlatformComponents struct {
+    GitProviders    []ProviderReference `json:"gitProviders,omitempty"`
+    Gateways        []ProviderReference `json:"gateways,omitempty"`
+    GitOpsProviders []ProviderReference `json:"gitOpsProviders,omitempty"`
+}
+
+type ProviderReference struct {
+    Name      string `json:"name"`      // Name of the provider CR
+    Kind      string `json:"kind"`      // Kind (e.g., GiteaProvider, NginxGateway)
+    Namespace string `json:"namespace"` // Namespace where provider exists
+}
+```
+
+#### Status Tracking Flow
+
+**File:** `pkg/controllers/platform/platform_controller.go`
+
+The Platform controller's reconciliation loop tracks provider status through these steps:
+
+1. **Fetch Each Provider Using Duck-Typing**
+   ```go
+   // Lines 156-210: aggregateGitProviders example
+   for _, gitProviderRef := range platform.Spec.Components.GitProviders {
+       // Use unstructured client for duck-typing
+       gvk := schema.GroupVersionKind{
+           Group:   "idpbuilder.cnoe.io",
+           Version: "v1alpha2",
+           Kind:    gitProviderRef.Kind,
+       }
+       
+       providerObj := &unstructured.Unstructured{}
+       providerObj.SetGroupVersionKind(gvk)
+       
+       err := r.Get(ctx, types.NamespacedName{
+           Name:      gitProviderRef.Name,
+           Namespace: gitProviderRef.Namespace,
+       }, providerObj)
+   }
+   ```
+
+2. **Check Ready Condition via Duck-Typing**
+   
+   The Platform controller uses duck-typing helpers to check if each provider is ready by examining the `Ready` condition in the provider's status:
+   
+   ```go
+   // Lines 192-202: Extract ready status
+   ready, err := provider.IsGitProviderReady(providerObj)
+   ```
+   
+   **Duck-Typing Implementation** (`pkg/util/provider/git.go`):
+   ```go
+   // Lines 102-109
+   func IsGitProviderReady(obj *unstructured.Unstructured) (bool, error) {
+       // Extract conditions from status
+       conditions, found, err := unstructured.NestedSlice(obj.Object, "status", "conditions")
+       
+       // Look for Ready condition with Status=True
+       for _, condition := range conditions {
+           condMap := condition.(map[string]interface{})
+           if condMap["type"] == "Ready" && condMap["status"] == "True" {
+               return true, nil
+           }
+       }
+       return false, nil
+   }
+   ```
+   
+   Similar functions exist for:
+   - `IsGatewayProviderReady()` in `pkg/util/provider/gateway.go`
+   - `IsGitOpsProviderReady()` in `pkg/util/provider/gitops.go`
+
+3. **Aggregate into Status Summary**
+   
+   Each provider's status is summarized in the Platform status:
+   
+   ```go
+   // Lines 198-202
+   summaries = append(summaries, v1alpha2.ProviderStatusSummary{
+       Name:  gitProviderRef.Name,
+       Kind:  gitProviderRef.Kind,
+       Ready: ready,
+   })
+   ```
+
+4. **Update Platform Status Fields**
+   
+   The aggregated provider statuses are stored in the Platform resource:
+   
+   ```go
+   // Lines 88-118: Main reconciliation flow
+   platform.Status.Providers.GitProviders = gitProviderStatuses
+   platform.Status.Providers.Gateways = gatewayStatuses
+   platform.Status.Providers.GitOpsProviders = gitopsStatuses
+   ```
+
+#### Platform Status Structure
+
+The Platform status contains aggregated provider information:
+
+```go
+// api/v1alpha2/platform_types.go
+type PlatformStatus struct {
+    // Conditions include the overall Ready condition
+    Conditions []metav1.Condition `json:"conditions,omitempty"`
+    
+    // Providers contains aggregated status of all referenced providers
+    Providers PlatformProviderStatus `json:"providers,omitempty"`
+    
+    // Phase represents current state: Pending, Initializing, or Ready
+    Phase string `json:"phase,omitempty"`
+    
+    ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+}
+
+type PlatformProviderStatus struct {
+    GitProviders    []ProviderStatusSummary `json:"gitProviders,omitempty"`
+    Gateways        []ProviderStatusSummary `json:"gateways,omitempty"`
+    GitOpsProviders []ProviderStatusSummary `json:"gitOpsProviders,omitempty"`
+}
+
+type ProviderStatusSummary struct {
+    Name  string `json:"name"`  // Provider name
+    Kind  string `json:"kind"`  // Provider kind
+    Ready bool   `json:"ready"` // Whether provider is ready
+}
+```
+
+#### Ready Condition Logic
+
+The Platform sets its overall `Ready` condition based on all provider statuses:
+
+```go
+// Lines 123-140
+if allReady && len(platform.Spec.Components.GitProviders) > 0 {
+    platform.Status.Phase = "Ready"
+    meta.SetStatusCondition(&platform.Status.Conditions, metav1.Condition{
+        Type:    "Ready",
+        Status:  metav1.ConditionTrue,
+        Reason:  "AllComponentsReady",
+        Message: "All platform components are operational",
+    })
+} else {
+    platform.Status.Phase = "Initializing"
+    meta.SetStatusCondition(&platform.Status.Conditions, metav1.Condition{
+        Type:    "Ready",
+        Status:  metav1.ConditionFalse,
+        Reason:  "ComponentsNotReady",
+        Message: "Waiting for platform components to be ready",
+    })
+}
+```
+
+### CLI Status Tracking and Display
+
+The CLI tracks the Platform resource status to display progress to the user.
+
+#### Status Reporter Integration
+
+**File:** `pkg/build/build.go`
+
+The CLI uses a status reporter to display workflow steps to users:
+
+```go
+// Lines 172-186: Example status reporting
+if b.statusReporter != nil {
+    b.statusReporter.StartStep("cluster")
+}
+if err := b.ReconcileKindCluster(ctx, recreateCluster); err != nil {
+    if b.statusReporter != nil {
+        b.statusReporter.FailStep("cluster", err)
+    }
+    return err
+}
+if b.statusReporter != nil {
+    b.statusReporter.CompleteStep("cluster")
+}
+```
+
+#### Status Reporter Implementation
+
+**File:** `pkg/status/reporter.go`
+
+The Reporter provides inline status updates with color coding:
+
+```go
+// Lines 56-65
+type Reporter struct {
+    steps      []Step      // Workflow steps
+    currentIdx int         // Current step index
+    writer     io.Writer   // Output destination
+    colored    bool        // Enable colors
+    simpleMode bool        // Simple vs. inline mode
+}
+
+type Step struct {
+    Name        string      // Step identifier
+    Description string      // User-visible description
+    State       State       // Pending, Running, Complete, or Failed
+    StartTime   time.Time
+    EndTime     time.Time
+    SubSteps    []SubStep   // Sub-tasks within step
+}
+```
+
+States available:
+```go
+const (
+    StatePending  State = iota  // Not started
+    StateRunning                // In progress
+    StateComplete               // Successfully completed
+    StateFailed                 // Failed with error
+)
+```
+
+#### Platform Status Monitoring Flow
+
+The CLI monitors Platform status through this sequence:
+
+1. **Create Platform CR**
+   
+   The CLI creates the Platform CR referencing all providers
+
+2. **Monitor Platform Phase**
+   
+   The CLI can track the Platform's phase transitions:
+   - `Pending` → Initial creation
+   - `Initializing` → Providers exist but not all ready
+   - `Ready` → All providers are ready
+
+3. **Display Status to User**
+   
+   The status reporter shows the workflow progress:
+   ```
+   ✓ cluster         Creating kind cluster
+   ✓ crds            Adding CRDs to cluster
+   ✓ networking      Setting up CoreDNS and TLS
+   ⟳ resources       Deploying platform components
+     └─ gitea        Installing git provider
+     └─ nginx        Installing gateway
+     └─ argocd       Installing GitOps provider
+   ```
+
+4. **Check Individual Provider Status**
+   
+   The Platform status provides detailed provider readiness:
+   ```yaml
+   status:
+     phase: Initializing
+     providers:
+       gitProviders:
+       - name: gitea
+         kind: GiteaProvider
+         ready: true
+       gateways:
+       - name: nginx
+         kind: NginxGateway
+         ready: true
+       gitOpsProviders:
+       - name: argocd
+         kind: ArgoCDProvider
+         ready: false  # Still installing
+     conditions:
+     - type: Ready
+       status: "False"
+       reason: ComponentsNotReady
+       message: "Waiting for platform components to be ready"
+   ```
+
+#### Status Display Progression
+
+Users see the following progression as the platform initializes:
+
+**Phase 1: Provider CRs Created**
+- Platform phase: `Pending`
+- Providers waiting for owner references
+- CLI shows "Deploying platform components" in progress
+
+**Phase 2: Providers Installing**
+- Platform phase: `Initializing`
+- Some providers ready, others still installing
+- CLI can show individual provider status if implemented
+
+**Phase 3: All Providers Ready**
+- Platform phase: `Ready`
+- All provider `Ready` conditions are `True`
+- CLI completes "resources" step successfully
+
+#### Future CLI Enhancements
+
+While the current implementation uses the status reporter for high-level workflow steps, future enhancements could include:
+
+1. **Real-time Provider Status Display**
+   ```go
+   // Monitor Platform status and update sub-steps
+   for _, provider := range platform.Status.Providers.GitProviders {
+       if provider.Ready {
+           reporter.UpdateSubStep("resources", provider.Name, StateComplete)
+       } else {
+           reporter.UpdateSubStep("resources", provider.Name, StateRunning)
+       }
+   }
+   ```
+
+2. **Watch-based Status Updates**
+   ```go
+   // Watch Platform resource for status changes
+   watcher, err := kubeClient.Watch(ctx, &v1alpha2.PlatformList{})
+   for event := range watcher.ResultChan() {
+       platform := event.Object.(*v1alpha2.Platform)
+       updateStatusDisplay(platform.Status)
+   }
+   ```
+
+3. **Detailed Condition Display**
+   ```go
+   // Show specific condition reasons for debugging
+   for _, condition := range platform.Status.Conditions {
+       if condition.Type == "Ready" && condition.Status == "False" {
+           fmt.Printf("Waiting: %s\n", condition.Message)
+       }
+   }
+   ```
+
+### Key Implementation Files
+
+| File | Purpose |
+|------|---------|
+| `pkg/controllers/platform/platform_controller.go` | Platform controller that tracks provider status |
+| `pkg/util/provider/git.go` | Duck-typing utilities for Git providers |
+| `pkg/util/provider/gateway.go` | Duck-typing utilities for Gateway providers |
+| `pkg/util/provider/gitops.go` | Duck-typing utilities for GitOps providers |
+| `api/v1alpha2/platform_types.go` | Platform and provider status type definitions |
+| `pkg/build/build.go` | CLI build orchestration with status reporting |
+| `pkg/status/reporter.go` | CLI status reporter implementation |
+
+### Tracking Flow Summary
+
+```mermaid
+sequenceDiagram
+    participant CLI
+    participant Platform as Platform Controller
+    participant Provider as Provider Controllers
+    participant K8s as Kubernetes API
+    
+    Note over CLI: User runs idpbuilder create
+    CLI->>K8s: Create Provider CRs
+    CLI->>K8s: Create Platform CR
+    CLI->>CLI: Start status reporter
+    
+    Note over Platform: Platform reconciliation loop
+    Platform->>K8s: Get GiteaProvider status
+    K8s-->>Platform: Provider with Ready condition
+    Platform->>Platform: Check Ready=True via duck-typing
+    Platform->>K8s: Get NginxGateway status
+    K8s-->>Platform: Provider with Ready condition
+    Platform->>Platform: Check Ready=True via duck-typing
+    
+    Note over Platform: Aggregate all provider statuses
+    Platform->>K8s: Update Platform.Status.Providers
+    Platform->>K8s: Set Platform.Status.Phase=Ready
+    Platform->>K8s: Set Ready condition=True
+    
+    Note over CLI: CLI monitors Platform status
+    CLI->>K8s: Get Platform status
+    K8s-->>CLI: Phase=Ready, Conditions[Ready]=True
+    CLI->>CLI: Complete "resources" step
+    CLI->>CLI: Display success to user
+```
+
 ## Summary
 
 ### Key Sequencing Mechanisms
