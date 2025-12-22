@@ -883,7 +883,7 @@ The Platform controller's reconciliation loop tracks provider status through the
 
 1. **Fetch Each Provider Using Duck-Typing**
    ```go
-   // Lines 156-210: aggregateGitProviders example
+   // Lines 161-175: aggregateGitProviders example
    for _, gitProviderRef := range platform.Spec.Components.GitProviders {
        // Use unstructured client for duck-typing
        gvk := schema.GroupVersionKind{
@@ -907,25 +907,34 @@ The Platform controller's reconciliation loop tracks provider status through the
    The Platform controller uses duck-typing helpers to check if each provider is ready by examining the `Ready` condition in the provider's status:
    
    ```go
-   // Lines 192-202: Extract ready status
+   // Line 192: Extract ready status
    ready, err := provider.IsGitProviderReady(providerObj)
    ```
    
    **Duck-Typing Implementation** (`pkg/util/provider/git.go`):
    ```go
-   // Lines 102-109
+   // Lines 103-109
    func IsGitProviderReady(obj *unstructured.Unstructured) (bool, error) {
-       // Extract conditions from status
-       conditions, found, err := unstructured.NestedSlice(obj.Object, "status", "conditions")
-       
-       // Look for Ready condition with Status=True
-       for _, condition := range conditions {
-           condMap := condition.(map[string]interface{})
-           if condMap["type"] == "Ready" && condMap["status"] == "True" {
-               return true, nil
-           }
+       status, err := GetGitProviderStatus(obj)
+       if err != nil {
+           return false, err
        }
-       return false, nil
+       return status.Ready, nil
+   }
+   ```
+   
+   The `GetGitProviderStatus` function (lines 34-100) extracts the Ready condition:
+   ```go
+   // Extract conditions from status
+   conditions, found, err := unstructured.NestedSlice(obj.Object, "status", "conditions")
+   
+   // Look for Ready condition with Status=True
+   for _, condition := range conditions {
+       condMap := condition.(map[string]interface{})
+       if condMap["type"] == "Ready" && condMap["status"] == "True" {
+           status.Ready = true
+           break
+       }
    }
    ```
    
@@ -951,7 +960,7 @@ The Platform controller's reconciliation loop tracks provider status through the
    The aggregated provider statuses are stored in the Platform resource:
    
    ```go
-   // Lines 88-118: Main reconciliation flow
+   // Lines 93, 104, 115: Update status fields
    platform.Status.Providers.GitProviders = gitProviderStatuses
    platform.Status.Providers.Gateways = gatewayStatuses
    platform.Status.Providers.GitOpsProviders = gitopsStatuses
@@ -994,7 +1003,7 @@ type ProviderStatusSummary struct {
 The Platform sets its overall `Ready` condition based on all provider statuses:
 
 ```go
-// Lines 123-140
+// Lines 124-140
 if allReady && len(platform.Spec.Components.GitProviders) > 0 {
     platform.Status.Phase = "Ready"
     meta.SetStatusCondition(&platform.Status.Conditions, metav1.Condition{
