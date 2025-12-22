@@ -209,12 +209,19 @@ spec:
                         kind:
                           description: Kind is the kind of the provider
                           type: string
+                        message:
+                          description: Message contains the message from the Ready
+                            condition
+                          type: string
                         name:
                           description: Name is the name of the provider
                           type: string
                         ready:
                           description: Ready indicates whether the provider is ready
                           type: boolean
+                        reason:
+                          description: Reason contains the reason from the Ready condition
+                          type: string
                       required:
                       - kind
                       - name
@@ -230,12 +237,19 @@ spec:
                         kind:
                           description: Kind is the kind of the provider
                           type: string
+                        message:
+                          description: Message contains the message from the Ready
+                            condition
+                          type: string
                         name:
                           description: Name is the name of the provider
                           type: string
                         ready:
                           description: Ready indicates whether the provider is ready
                           type: boolean
+                        reason:
+                          description: Reason contains the reason from the Ready condition
+                          type: string
                       required:
                       - kind
                       - name
@@ -251,12 +265,19 @@ spec:
                         kind:
                           description: Kind is the kind of the provider
                           type: string
+                        message:
+                          description: Message contains the message from the Ready
+                            condition
+                          type: string
                         name:
                           description: Name is the name of the provider
                           type: string
                         ready:
                           description: Ready indicates whether the provider is ready
                           type: boolean
+                        reason:
+                          description: Reason contains the reason from the Ready condition
+                          type: string
                       required:
                       - kind
                       - name

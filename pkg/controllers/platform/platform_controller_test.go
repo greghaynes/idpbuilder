@@ -76,8 +76,10 @@ func TestPlatformReconciler_Reconcile(t *testing.T) {
 					Status: v1alpha2.GiteaProviderStatus{
 						Conditions: []metav1.Condition{
 							{
-								Type:   "Ready",
-								Status: metav1.ConditionTrue,
+								Type:    "Ready",
+								Status:  metav1.ConditionTrue,
+								Message: "Gitea is ready",
+								Reason:  "GiteaReady",
 							},
 						},
 					},
@@ -89,6 +91,8 @@ func TestPlatformReconciler_Reconcile(t *testing.T) {
 				assert.Equal(t, "Ready", p.Status.Phase)
 				assert.Len(t, p.Status.Providers.GitProviders, 1)
 				assert.True(t, p.Status.Providers.GitProviders[0].Ready)
+				assert.Equal(t, "Gitea is ready", p.Status.Providers.GitProviders[0].Message)
+				assert.Equal(t, "GiteaReady", p.Status.Providers.GitProviders[0].Reason)
 			},
 		},
 		{
@@ -165,8 +169,10 @@ func TestPlatformReconciler_Reconcile(t *testing.T) {
 					Status: v1alpha2.GiteaProviderStatus{
 						Conditions: []metav1.Condition{
 							{
-								Type:   "Ready",
-								Status: metav1.ConditionFalse,
+								Type:    "Ready",
+								Status:  metav1.ConditionFalse,
+								Message: "Deployment not ready",
+								Reason:  "DeploymentNotReady",
 							},
 						},
 					},
@@ -178,6 +184,8 @@ func TestPlatformReconciler_Reconcile(t *testing.T) {
 				assert.Equal(t, "Initializing", p.Status.Phase)
 				assert.Len(t, p.Status.Providers.GitProviders, 1)
 				assert.False(t, p.Status.Providers.GitProviders[0].Ready)
+				assert.Equal(t, "Deployment not ready", p.Status.Providers.GitProviders[0].Message)
+				assert.Equal(t, "DeploymentNotReady", p.Status.Providers.GitProviders[0].Reason)
 			},
 		},
 	}
@@ -271,8 +279,10 @@ func TestPlatformReconciler_aggregateGitProviders(t *testing.T) {
 					Status: v1alpha2.GiteaProviderStatus{
 						Conditions: []metav1.Condition{
 							{
-								Type:   "Ready",
-								Status: metav1.ConditionTrue,
+								Type:    "Ready",
+								Status:  metav1.ConditionTrue,
+								Message: "All components ready",
+								Reason:  "Ready",
 							},
 						},
 					},

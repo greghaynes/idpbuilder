@@ -20,6 +20,12 @@ type GatewayProviderStatus struct {
 
 	// Ready indicates whether the provider is ready
 	Ready bool
+
+	// Message contains the message from the Ready condition
+	Message string
+
+	// Reason contains the reason from the Ready condition
+	Reason string
 }
 
 // GetGatewayProviderStatus extracts duck-typed status from any Gateway provider CR
@@ -76,8 +82,14 @@ func GetGatewayProviderStatus(obj *unstructured.Unstructured) (*GatewayProviderS
 			condStatus, ok := condMap["status"].(string)
 			if ok && condStatus == "True" {
 				status.Ready = true
-				break
 			}
+			if message, ok := condMap["message"].(string); ok {
+				status.Message = message
+			}
+			if reason, ok := condMap["reason"].(string); ok {
+				status.Reason = reason
+			}
+			break
 		}
 	}
 

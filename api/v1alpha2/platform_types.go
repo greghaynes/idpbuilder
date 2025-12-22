@@ -89,6 +89,14 @@ type ProviderStatusSummary struct {
 
 	// Ready indicates whether the provider is ready
 	Ready bool `json:"ready"`
+
+	// Message contains the message from the Ready condition
+	// +optional
+	Message string `json:"message,omitempty"`
+
+	// Reason contains the reason from the Ready condition
+	// +optional
+	Reason string `json:"reason,omitempty"`
 }
 
 // Platform is the Schema for the platforms API
