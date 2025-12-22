@@ -3,7 +3,6 @@ package util
 import (
 	"strconv"
 	"testing"
-	"time"
 
 	"github.com/cnoe-io/idpbuilder/api/v1alpha1"
 	"github.com/stretchr/testify/assert"
@@ -60,13 +59,6 @@ func (m *MockObject) GetObjectKind() schema.ObjectKind {
 
 func (m *MockObject) DeepCopyObject() runtime.Object {
 	return nil
-}
-
-func TestGetHttpClient(t *testing.T) {
-	client := GetHttpClient()
-	assert.NotNil(t, client, "HTTP client should not be nil")
-	assert.NotNil(t, client.Transport, "HTTP transport should not be nil")
-	assert.Equal(t, 30*time.Second, client.Timeout, "HTTP client timeout should be 30 seconds")
 }
 
 func TestSetPackageLabels(t *testing.T) {

@@ -428,13 +428,13 @@ func (r *GiteaProviderReconciler) isGiteaReady(ctx context.Context, provider *v1
 		Message: fmt.Sprintf("Deployment has %d available replicas", availableReplicas),
 	})
 
-	// Check if Gitea API endpoint is accessible
-	config := r.buildConfigFromSpec(provider)
-	baseUrl := util.GiteaBaseUrl(config)
-	logger.V(1).Info("checking gitea api endpoint", "url", baseUrl)
+	// Check if Gitea API endpoint is accessible using internal cluster URL
+	// Use the internal service URL instead of external URL to avoid ingress/port issues
+	internalUrl := fmt.Sprintf("http://my-gitea-http.%s.svc.cluster.local:3000", provider.Spec.Namespace)
+	logger.V(1).Info("checking gitea api endpoint", "url", internalUrl)
 
 	c := util.GetHttpClient()
-	resp, err := c.Get(baseUrl)
+	resp, err := c.Get(internalUrl)
 	if err != nil {
 		logger.V(1).Info("Gitea API not yet accessible", "error", err)
 		meta.SetStatusCondition(&provider.Status.Conditions, metav1.Condition{
