@@ -12,6 +12,23 @@ const { marked } = require('marked');
 // Custom renderer for mermaid diagrams and prism.js syntax highlighting
 const renderer = new marked.Renderer();
 const originalCodeRenderer = renderer.code.bind(renderer);
+const originalHeadingRenderer = renderer.heading.bind(renderer);
+
+// Helper function to create slug from text
+const slugify = (text) => {
+  return text
+    .toLowerCase()
+    .trim()
+    .replace(/[^\w\s-]/g, '')
+    .replace(/[\s_-]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+};
+
+// Custom heading renderer to ensure IDs are added
+renderer.heading = function(text, level, raw) {
+  const id = slugify(raw);
+  return `<h${level} id="${id}">${text}</h${level}>\n`;
+};
 
 // Helper function to sanitize language identifier
 const sanitizeLanguage = (lang) => {
@@ -311,7 +328,8 @@ const main = () => {
   const categories = [
     { dir: 'specs', title: 'Technical Specifications' },
     { dir: 'implementation', title: 'Implementation Documentation' },
-    { dir: 'user', title: 'User Guides' }
+    { dir: 'user', title: 'User Guides' },
+    { dir: 'api', title: 'API Reference' }
   ];
   
   categories.forEach(({ dir, title }) => {

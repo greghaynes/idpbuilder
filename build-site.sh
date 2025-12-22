@@ -44,6 +44,32 @@ else
     echo "Warning: Node.js not found. Skipping example page generation."
 fi
 
+# Generate API overview page
+echo "Generating API overview page..."
+if command -v node >/dev/null 2>&1; then
+    if [ -f "./scripts/generate-api-page.js" ]; then
+        node ./scripts/generate-api-page.js
+        echo "API overview page generated successfully!"
+    else
+        echo "Warning: generate-api-page.js not found"
+    fi
+else
+    echo "Warning: Node.js not found. Skipping API page generation."
+fi
+
+# Generate API reference documentation from CRDs
+echo "Generating API reference documentation..."
+if command -v make >/dev/null 2>&1; then
+    if [ -f "./Makefile" ]; then
+        make api-docs
+        echo "API reference documentation generated successfully!"
+    else
+        echo "Warning: Makefile not found"
+    fi
+else
+    echo "Warning: make not found. Skipping API documentation generation."
+fi
+
 # Copy all static files
 echo "Copying static files..."
 cp -r "$BUILD_DIR"/* "$OUTPUT_DIR/"
@@ -57,12 +83,14 @@ if [ -d "$DOCS_SOURCE_DIR" ]; then
     mkdir -p "$OUTPUT_DIR/docs/implementation"
     mkdir -p "$OUTPUT_DIR/docs/user"
     mkdir -p "$OUTPUT_DIR/docs/images"
+    mkdir -p "$OUTPUT_DIR/docs/api"
     
     # Copy markdown files (will be converted to HTML next)
     cp -r "$DOCS_SOURCE_DIR/specs"/*.md "$OUTPUT_DIR/docs/specs/" 2>/dev/null || true
     cp -r "$DOCS_SOURCE_DIR/implementation"/*.md "$OUTPUT_DIR/docs/implementation/" 2>/dev/null || true
     cp -r "$DOCS_SOURCE_DIR/user"/*.md "$OUTPUT_DIR/docs/user/" 2>/dev/null || true
     cp -r "$DOCS_SOURCE_DIR/images"/* "$OUTPUT_DIR/docs/images/" 2>/dev/null || true
+    cp -r "$DOCS_SOURCE_DIR/api"/*.md "$OUTPUT_DIR/docs/api/" 2>/dev/null || true
     
     # Copy main docs README if it exists
     [ -f "$DOCS_SOURCE_DIR/README.md" ] && cp "$DOCS_SOURCE_DIR/README.md" "$OUTPUT_DIR/docs/README.md"
@@ -79,6 +107,7 @@ if [ -d "$DOCS_SOURCE_DIR" ]; then
             find "$OUTPUT_DIR/docs/specs" -name "*.md" -type f ! -name "README.md" -delete 2>/dev/null || true
             find "$OUTPUT_DIR/docs/implementation" -name "*.md" -type f ! -name "README.md" -delete 2>/dev/null || true
             find "$OUTPUT_DIR/docs/user" -name "*.md" -type f ! -name "README.md" -delete 2>/dev/null || true
+            find "$OUTPUT_DIR/docs/api" -name "*.md" -type f ! -name "README.md" -delete 2>/dev/null || true
             
             echo "Markdown conversion completed!"
         else
@@ -151,6 +180,7 @@ cat > "$OUTPUT_DIR/_redirects" << 'EOF'
 /docs/user/* /docs/user/:splat 200
 /docs/images/* /docs/images/:splat 200
 /docs/examples/* /docs/examples/:splat 200
+/docs/api/* /docs/api/:splat 200
 EOF
 
 echo "Build completed successfully!"

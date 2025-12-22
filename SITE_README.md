@@ -170,7 +170,19 @@ The build process automatically includes organized documentation from the `docs/
 - **Technical Specifications** (`docs/specs/`) - Architectural design documents
 - **Implementation Documentation** (`docs/implementation/`) - Developer and testing docs
 - **User Documentation** (`docs/user/`) - End-user guides
+- **API Reference** (`docs/api/`) - Auto-generated CRD documentation
 - **Images** (`docs/images/`) - Shared documentation assets
+
+### API Reference Documentation
+
+The API reference documentation is automatically generated from the CRD type definitions in the `api/` directory using `crd-ref-docs`. During the build:
+
+1. CRD documentation is generated from Go source code: `make api-docs`
+2. The markdown file is placed in `docs/api/reference.md`
+3. It's converted to HTML and deployed to `public/docs/api/reference.html`
+4. An overview page at `/docs/api.html` provides context and navigation
+
+This ensures the API documentation is always in sync with the actual CRD definitions.
 
 ## Examples Integration
 
@@ -202,6 +214,7 @@ These are accessible at:
 - `https://your-site.com/docs/specs/` - Technical specifications
 - `https://your-site.com/docs/implementation/` - Developer/testing docs
 - `https://your-site.com/docs/user/` - User guides
+- `https://your-site.com/docs/api/` - API reference documentation
 - `https://your-site.com/docs/examples/` - Example configurations and guides
 
 This allows the documentation and examples to be versioned with the code and automatically deployed with the site as web-native HTML pages.
