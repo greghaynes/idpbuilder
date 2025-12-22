@@ -67,11 +67,12 @@ func (r *ArgoCDProviderReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	// Install ArgoCD
 	if err := r.installArgoCD(ctx, argocdProvider); err != nil {
 		logger.Error(err, "Failed to install ArgoCD")
-		r.setCondition(argocdProvider, metav1.Condition{
-			Type:    "Ready",
-			Status:  metav1.ConditionFalse,
-			Reason:  "InstallationFailed",
-			Message: fmt.Sprintf("Failed to install ArgoCD: %v", err),
+		meta.SetStatusCondition(&argocdProvider.Status.Conditions, metav1.Condition{
+			Type:               "Ready",
+			Status:             metav1.ConditionFalse,
+			Reason:             "InstallationFailed",
+			Message:            fmt.Sprintf("Failed to install ArgoCD: %v", err),
+			LastTransitionTime: metav1.Now(),
 		})
 		argocdProvider.Status.Phase = "Failed"
 		if statusErr := r.Status().Update(ctx, argocdProvider); statusErr != nil {
@@ -115,11 +116,12 @@ func (r *ArgoCDProviderReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 
 	if !ready {
 		logger.Info("ArgoCD not ready yet, requeuing")
-		r.setCondition(argocdProvider, metav1.Condition{
-			Type:    "Ready",
-			Status:  metav1.ConditionFalse,
-			Reason:  "Installing",
-			Message: "ArgoCD installation in progress",
+		meta.SetStatusCondition(&argocdProvider.Status.Conditions, metav1.Condition{
+			Type:               "Ready",
+			Status:             metav1.ConditionFalse,
+			Reason:             "Installing",
+			Message:            "ArgoCD installation in progress",
+			LastTransitionTime: metav1.Now(),
 		})
 		argocdProvider.Status.Phase = "Installing"
 		if err := r.Status().Update(ctx, argocdProvider); err != nil {
@@ -498,11 +500,12 @@ func (r *ArgoCDProviderReconciler) updateStatus(ctx context.Context, argocdProvi
 	}
 
 	// Set Ready condition
-	r.setCondition(argocdProvider, metav1.Condition{
-		Type:    "Ready",
-		Status:  metav1.ConditionTrue,
-		Reason:  "ArgoCDInstalled",
-		Message: "ArgoCD is installed and ready",
+	meta.SetStatusCondition(&argocdProvider.Status.Conditions, metav1.Condition{
+		Type:               "Ready",
+		Status:             metav1.ConditionTrue,
+		Reason:             "ArgoCDInstalled",
+		Message:            "ArgoCD is installed and ready",
+		LastTransitionTime: metav1.Now(),
 	})
 
 	if err := r.Status().Update(ctx, argocdProvider); err != nil {
@@ -511,11 +514,6 @@ func (r *ArgoCDProviderReconciler) updateStatus(ctx context.Context, argocdProvi
 
 	logger.Info("Updated ArgoCDProvider status", "phase", argocdProvider.Status.Phase)
 	return nil
-}
-
-func (r *ArgoCDProviderReconciler) setCondition(argocdProvider *v1alpha2.ArgoCDProvider, condition metav1.Condition) {
-	condition.LastTransitionTime = metav1.Now()
-	meta.SetStatusCondition(&argocdProvider.Status.Conditions, condition)
 }
 
 // generateRandomPassword generates a random password of the specified length

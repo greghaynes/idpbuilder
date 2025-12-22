@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
@@ -473,17 +474,16 @@ func TestArgoCDProviderReconciler_SetCondition(t *testing.T) {
 		},
 	}
 
-	reconciler := &ArgoCDProviderReconciler{}
-
 	// Set a condition
 	condition := metav1.Condition{
-		Type:    "Ready",
-		Status:  metav1.ConditionTrue,
-		Reason:  "InstallationComplete",
-		Message: "ArgoCD is ready",
+		Type:               "Ready",
+		Status:             metav1.ConditionTrue,
+		Reason:             "InstallationComplete",
+		Message:            "ArgoCD is ready",
+		LastTransitionTime: metav1.Now(),
 	}
 
-	reconciler.setCondition(argocdProvider, condition)
+	meta.SetStatusCondition(&argocdProvider.Status.Conditions, condition)
 
 	// Verify condition was added
 	require.Len(t, argocdProvider.Status.Conditions, 1, "Should have one condition")
@@ -503,26 +503,26 @@ func TestArgoCDProviderReconciler_SetCondition_Update(t *testing.T) {
 		Status: v1alpha2.ArgoCDProviderStatus{
 			Conditions: []metav1.Condition{
 				{
-					Type:    "Ready",
-					Status:  metav1.ConditionFalse,
-					Reason:  "Installing",
-					Message: "Installing ArgoCD",
+					Type:               "Ready",
+					Status:             metav1.ConditionFalse,
+					Reason:             "Installing",
+					Message:            "Installing ArgoCD",
+					LastTransitionTime: metav1.Now(),
 				},
 			},
 		},
 	}
 
-	reconciler := &ArgoCDProviderReconciler{}
-
 	// Update the condition
 	condition := metav1.Condition{
-		Type:    "Ready",
-		Status:  metav1.ConditionTrue,
-		Reason:  "InstallationComplete",
-		Message: "ArgoCD is ready",
+		Type:               "Ready",
+		Status:             metav1.ConditionTrue,
+		Reason:             "InstallationComplete",
+		Message:            "ArgoCD is ready",
+		LastTransitionTime: metav1.Now(),
 	}
 
-	reconciler.setCondition(argocdProvider, condition)
+	meta.SetStatusCondition(&argocdProvider.Status.Conditions, condition)
 
 	// Verify condition was updated
 	require.Len(t, argocdProvider.Status.Conditions, 1, "Should still have one condition")
