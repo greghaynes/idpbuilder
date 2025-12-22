@@ -142,12 +142,28 @@ func IsYamlFile(input string) bool {
 }
 
 func GetHttpClient() *http.Client {
+	// Custom dialer that prefers IPv4 to avoid issues with IPv6 localhost
+	// when connecting to services like gitea.cnoe.localtest.me
+	dialer := &net.Dialer{
+		Timeout:   5 * time.Second,
+		KeepAlive: 30 * time.Second, // from http.DefaultTransport
+	}
+	
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-		DialContext: (&net.Dialer{
-			Timeout:   5 * time.Second,
-			KeepAlive: 30 * time.Second, // from http.DefaultTransport
-		}).DialContext,
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			// First try IPv4 (tcp4), then fall back to original network type
+			// This ensures we prefer IPv4 when both IPv4 and IPv6 addresses are available
+			if network == "tcp" {
+				conn, err := dialer.DialContext(ctx, "tcp4", addr)
+				if err == nil {
+					return conn, nil
+				}
+				// If IPv4 fails, try IPv6
+				return dialer.DialContext(ctx, "tcp6", addr)
+			}
+			return dialer.DialContext(ctx, network, addr)
+		},
 	}
 	return &http.Client{Transport: tr, Timeout: 30 * time.Second}
 }
