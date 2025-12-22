@@ -93,8 +93,9 @@ func TestNginxGatewayFunctional(t *testing.T) {
 	require.NoError(t, err2, "Failed to get updated NginxGateway")
 
 	// Status should be populated - the reconciler sets phase even when install fails
-	// Since we can't parse all nginx manifests without the full scheme, it will set to "Failed"
-	assert.Contains(t, []string{"Installing", "Failed"}, updatedGateway.Status.Phase, "Phase should be set")
+	// Since we don't have a Platform owner reference, it will set to "WaitingForPlatform"
+	// Or if Platform owner exists, it may be "Installing" or "Failed"
+	assert.Contains(t, []string{"WaitingForPlatform", "Installing", "Failed"}, updatedGateway.Status.Phase, "Phase should be set")
 }
 
 // TestNginxGatewayResourcesCreated tests that nginx resources are actually created

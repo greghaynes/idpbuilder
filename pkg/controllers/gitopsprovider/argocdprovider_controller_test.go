@@ -153,8 +153,8 @@ func TestArgoCDProviderReconciler_StatusInitialization(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify status was initialized
-	assert.Contains(t, []string{"Pending", "Failed"}, updatedProvider.Status.Phase,
-		"Phase should be set to Pending initially or Failed if installation fails")
+	assert.Contains(t, []string{"WaitingForPlatform", "Pending", "Failed"}, updatedProvider.Status.Phase,
+		"Phase should be set to WaitingForPlatform initially (no Platform owner) or Pending/Failed if Platform owner exists")
 }
 
 // TestArgoCDProviderReconciler_EnsureAdminCredentials_AutoGenerate tests credential auto-generation
@@ -629,19 +629,20 @@ func TestArgoCDProviderReconciler_InstallationError(t *testing.T) {
 		},
 	}
 
-	// Reconcile - will fail on manifest parsing in fake client
+	// Reconcile - will wait for Platform owner reference since it's not present
 	_, err := reconciler.Reconcile(ctx, req)
-	require.Error(t, err, "Should error when installation fails")
+	// Should not error - just requeue waiting for Platform
+	require.NoError(t, err, "Should not error when waiting for Platform")
 
 	// Get updated provider
 	updatedProvider := &v1alpha2.ArgoCDProvider{}
 	err = fakeClient.Get(ctx, req.NamespacedName, updatedProvider)
 	require.NoError(t, err)
 
-	// Verify status reflects the failure
-	assert.Equal(t, "Failed", updatedProvider.Status.Phase, "Phase should be Failed")
+	// Verify status reflects waiting for platform
+	assert.Equal(t, "WaitingForPlatform", updatedProvider.Status.Phase, "Phase should be WaitingForPlatform")
 
-	// Verify Ready condition reflects the failure
+	// Verify Ready condition reflects the waiting state
 	var readyCondition *metav1.Condition
 	for i := range updatedProvider.Status.Conditions {
 		if updatedProvider.Status.Conditions[i].Type == "Ready" {
@@ -651,8 +652,8 @@ func TestArgoCDProviderReconciler_InstallationError(t *testing.T) {
 	}
 	if readyCondition != nil {
 		assert.Equal(t, metav1.ConditionFalse, readyCondition.Status, "Ready condition should be False")
-		assert.Equal(t, "InstallationFailed", readyCondition.Reason)
-		assert.Contains(t, readyCondition.Message, "Failed to install ArgoCD")
+		assert.Equal(t, "WaitingForPlatform", readyCondition.Reason)
+		assert.Contains(t, readyCondition.Message, "Waiting for Platform resource to add owner reference")
 	}
 }
 
