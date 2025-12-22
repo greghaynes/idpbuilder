@@ -437,7 +437,10 @@ func (r *NginxGatewayReconciler) isServiceReady(ctx context.Context, gateway *v1
 	}
 
 	// Service exists, consider it ready
-	// For more advanced checks, we could verify endpoints exist
+	// Note: We check only for service existence rather than endpoints because:
+	// 1. The deployment readiness check already validates that pods are running
+	// 2. Service endpoints will be automatically populated once pods are ready
+	// 3. This simplifies the check while still providing meaningful status
 	return true, nil
 }
 
