@@ -1,4 +1,13 @@
-<!DOCTYPE html>
+#!/usr/bin/env node
+
+/**
+ * Generate API overview page
+ */
+
+const fs = require('fs');
+const path = require('path');
+
+const apiPageContent = `<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -264,3 +273,16 @@
     </script>
 </body>
 </html>
+`;
+
+const outputDir = path.join(__dirname, '../site/docs');
+const outputPath = path.join(outputDir, 'api.html');
+
+// Ensure output directory exists
+if (!fs.existsSync(outputDir)) {
+    fs.mkdirSync(outputDir, { recursive: true });
+}
+
+// Write the file
+fs.writeFileSync(outputPath, apiPageContent);
+console.log(`Generated: ${outputPath}`);

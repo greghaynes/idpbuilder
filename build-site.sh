@@ -44,6 +44,19 @@ else
     echo "Warning: Node.js not found. Skipping example page generation."
 fi
 
+# Generate API overview page
+echo "Generating API overview page..."
+if command -v node >/dev/null 2>&1; then
+    if [ -f "./scripts/generate-api-page.js" ]; then
+        node ./scripts/generate-api-page.js
+        echo "API overview page generated successfully!"
+    else
+        echo "Warning: generate-api-page.js not found"
+    fi
+else
+    echo "Warning: Node.js not found. Skipping API page generation."
+fi
+
 # Generate API reference documentation from CRDs
 echo "Generating API reference documentation..."
 if command -v make >/dev/null 2>&1; then
