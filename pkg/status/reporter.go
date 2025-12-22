@@ -225,9 +225,12 @@ func (r *Reporter) UpdateSubStepWithPhase(parentName, subStepName string, state 
 				if r.steps[i].SubSteps[j].Name == subStepName {
 					r.steps[i].SubSteps[j].State = State(state)
 					// Update description to include phase
+					baseDesc := subStepName
 					if phase != "" {
-						baseDesc := subStepName
 						r.steps[i].SubSteps[j].Description = fmt.Sprintf("%s (%s)", baseDesc, phase)
+					} else {
+						// Clear any previous phase information when phase is empty
+						r.steps[i].SubSteps[j].Description = baseDesc
 					}
 					r.render()
 					return

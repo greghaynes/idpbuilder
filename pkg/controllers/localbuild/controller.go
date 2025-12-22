@@ -49,16 +49,16 @@ const (
 	argoCDApplicationSetAnnotationKeyRefresh      = "argocd.argoproj.io/application-set-refresh"
 	argoCDApplicationSetAnnotationKeyRefreshTrue  = "true"
 
-	// Gitea installation tracking constants
-	giteaStatusPollInterval = time.Second * 5
-	giteaInstallTimeout     = time.Minute * 5
+	// Provider installation tracking constants
+	statusPollInterval = time.Second * 5
+	installTimeout     = time.Minute * 5
 )
 
 var (
 	// errGiteaProviderNotReady is returned when the GiteaProvider is not yet ready
 	errGiteaProviderNotReady = errors.New("GiteaProvider is not ready yet")
-	// errGiteaInstallTimeout is returned when the GiteaProvider installation times out
-	errGiteaInstallTimeout = errors.New("Gitea installation timed out")
+	// errInstallTimeout is returned when a provider installation times out
+	errInstallTimeout = errors.New("Provider installation timed out")
 )
 
 type ArgocdSession struct {
@@ -277,10 +277,10 @@ func (r *LocalbuildReconciler) trackGiteaInstallation(ctx context.Context, resou
 	}
 
 	// Poll for GiteaProvider readiness
-	ticker := time.NewTicker(giteaStatusPollInterval)
+	ticker := time.NewTicker(statusPollInterval)
 	defer ticker.Stop()
 
-	timeout := time.After(giteaInstallTimeout)
+	timeout := time.After(installTimeout)
 
 	for {
 		select {
@@ -288,7 +288,7 @@ func (r *LocalbuildReconciler) trackGiteaInstallation(ctx context.Context, resou
 			logger.V(1).Info("Context cancelled while tracking gitea installation")
 			return
 		case <-timeout:
-			logger.Error(errGiteaInstallTimeout, "Gitea installation timed out")
+			logger.Error(errInstallTimeout, "Gitea installation timed out")
 			if r.StatusReporter != nil {
 				r.StatusReporter.UpdateSubStep("packages", v1alpha1.GiteaPackageName, 3) // StateFailed = 3
 			}
@@ -360,10 +360,10 @@ func (r *LocalbuildReconciler) trackArgoCDInstallation(ctx context.Context, reso
 	}
 
 	// Poll for ArgoCDProvider readiness
-	ticker := time.NewTicker(giteaStatusPollInterval)
+	ticker := time.NewTicker(statusPollInterval)
 	defer ticker.Stop()
 
-	timeout := time.After(giteaInstallTimeout)
+	timeout := time.After(installTimeout)
 
 	for {
 		select {
@@ -443,10 +443,10 @@ func (r *LocalbuildReconciler) trackNginxInstallation(ctx context.Context, resou
 	}
 
 	// Poll for NginxGateway readiness
-	ticker := time.NewTicker(giteaStatusPollInterval)
+	ticker := time.NewTicker(statusPollInterval)
 	defer ticker.Stop()
 
-	timeout := time.After(giteaInstallTimeout)
+	timeout := time.After(installTimeout)
 
 	for {
 		select {

@@ -83,3 +83,27 @@ func TestReporter_UpdateSubStepBackwardCompatibility(t *testing.T) {
 		t.Errorf("Expected test to be complete")
 	}
 }
+
+// Test that empty phase clears previous phase information
+func TestReporter_EmptyPhaseClearsPreviousPhase(t *testing.T) {
+	reporter := NewReporter(false)
+	reporter.AddStep("packages", "Installing packages")
+	reporter.StartStep("packages")
+
+	reporter.AddSubStep("packages", "test", "test-package")
+
+	// Set a phase
+	reporter.UpdateSubStepWithPhase("packages", "test", 1, "Installing")
+	if !strings.Contains(reporter.steps[0].SubSteps[0].Description, "Installing") {
+		t.Errorf("Expected description to contain 'Installing', got %s", reporter.steps[0].SubSteps[0].Description)
+	}
+
+	// Clear the phase with empty string
+	reporter.UpdateSubStepWithPhase("packages", "test", 1, "")
+	if strings.Contains(reporter.steps[0].SubSteps[0].Description, "Installing") {
+		t.Errorf("Expected description to NOT contain 'Installing' after clearing, got %s", reporter.steps[0].SubSteps[0].Description)
+	}
+	if reporter.steps[0].SubSteps[0].Description != "test" {
+		t.Errorf("Expected description to be 'test', got %s", reporter.steps[0].SubSteps[0].Description)
+	}
+}
