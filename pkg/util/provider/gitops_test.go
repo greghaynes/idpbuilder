@@ -33,8 +33,10 @@ func TestGetGitOpsProviderStatus(t *testing.T) {
 						},
 						"conditions": []interface{}{
 							map[string]interface{}{
-								"type":   "Ready",
-								"status": "True",
+								"type":    "Ready",
+								"status":  "True",
+								"message": "ArgoCD is ready",
+								"reason":  "ArgoCDReady",
 							},
 						},
 					},
@@ -48,7 +50,9 @@ func TestGetGitOpsProviderStatus(t *testing.T) {
 					Namespace: "argocd",
 					Key:       "password",
 				},
-				Ready: true,
+				Ready:   true,
+				Message: "ArgoCD is ready",
+				Reason:  "ArgoCDReady",
 			},
 			wantErr: false,
 		},
@@ -61,8 +65,10 @@ func TestGetGitOpsProviderStatus(t *testing.T) {
 						"internalEndpoint": "http://argocd-server.argocd.svc.cluster.local",
 						"conditions": []interface{}{
 							map[string]interface{}{
-								"type":   "Ready",
-								"status": "False",
+								"type":    "Ready",
+								"status":  "False",
+								"message": "Waiting for deployment",
+								"reason":  "DeploymentNotReady",
 							},
 						},
 					},
@@ -72,6 +78,8 @@ func TestGetGitOpsProviderStatus(t *testing.T) {
 				Endpoint:         "https://argocd.cnoe.localtest.me",
 				InternalEndpoint: "http://argocd-server.argocd.svc.cluster.local",
 				Ready:            false,
+				Message:          "Waiting for deployment",
+				Reason:           "DeploymentNotReady",
 			},
 			wantErr: false,
 		},
@@ -102,6 +110,12 @@ func TestGetGitOpsProviderStatus(t *testing.T) {
 				}
 				if got.Ready != tt.want.Ready {
 					t.Errorf("Ready = %v, want %v", got.Ready, tt.want.Ready)
+				}
+				if got.Message != tt.want.Message {
+					t.Errorf("Message = %v, want %v", got.Message, tt.want.Message)
+				}
+				if got.Reason != tt.want.Reason {
+					t.Errorf("Reason = %v, want %v", got.Reason, tt.want.Reason)
 				}
 			}
 		})
