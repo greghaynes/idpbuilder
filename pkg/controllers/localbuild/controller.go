@@ -267,6 +267,11 @@ func (r *LocalbuildReconciler) installCorePackages(ctx context.Context, req ctrl
 	wg.Wait()
 }
 
+// isErrorPhase checks if a provider phase indicates an error state
+func isErrorPhase(phase string) bool {
+	return phase == "ConfigurationError" || phase == "Failed"
+}
+
 // trackGiteaInstallation monitors GiteaProvider status and updates the gitea substep
 func (r *LocalbuildReconciler) trackGiteaInstallation(ctx context.Context, resource *v1alpha1.Localbuild) {
 	logger := log.FromContext(ctx)
@@ -326,8 +331,13 @@ func (r *LocalbuildReconciler) trackGiteaInstallation(ctx context.Context, resou
 			}
 
 			// Update the substep with the current phase
+			// Use StateFailed (3) if phase indicates an error, otherwise StateRunning (1)
 			if r.StatusReporter != nil {
-				r.StatusReporter.UpdateSubStepWithPhase("packages", v1alpha1.GiteaPackageName, 1, phase)
+				if isErrorPhase(phase) {
+					r.StatusReporter.UpdateSubStepWithPhase("packages", v1alpha1.GiteaPackageName, 3, phase) // StateFailed = 3
+					return
+				}
+				r.StatusReporter.UpdateSubStepWithPhase("packages", v1alpha1.GiteaPackageName, 1, phase) // StateRunning = 1
 			}
 
 			// Check if provider is ready
@@ -409,8 +419,13 @@ func (r *LocalbuildReconciler) trackArgoCDInstallation(ctx context.Context, reso
 			}
 
 			// Update the substep with the current phase
+			// Use StateFailed (3) if phase indicates an error, otherwise StateRunning (1)
 			if r.StatusReporter != nil {
-				r.StatusReporter.UpdateSubStepWithPhase("packages", v1alpha1.ArgoCDPackageName, 1, phase)
+				if isErrorPhase(phase) {
+					r.StatusReporter.UpdateSubStepWithPhase("packages", v1alpha1.ArgoCDPackageName, 3, phase) // StateFailed = 3
+					return
+				}
+				r.StatusReporter.UpdateSubStepWithPhase("packages", v1alpha1.ArgoCDPackageName, 1, phase) // StateRunning = 1
 			}
 
 			// Check if provider is ready
@@ -492,8 +507,13 @@ func (r *LocalbuildReconciler) trackNginxInstallation(ctx context.Context, resou
 			}
 
 			// Update the substep with the current phase
+			// Use StateFailed (3) if phase indicates an error, otherwise StateRunning (1)
 			if r.StatusReporter != nil {
-				r.StatusReporter.UpdateSubStepWithPhase("packages", "nginx", 1, phase)
+				if isErrorPhase(phase) {
+					r.StatusReporter.UpdateSubStepWithPhase("packages", "nginx", 3, phase) // StateFailed = 3
+					return
+				}
+				r.StatusReporter.UpdateSubStepWithPhase("packages", "nginx", 1, phase) // StateRunning = 1
 			}
 
 			// Check if provider is ready

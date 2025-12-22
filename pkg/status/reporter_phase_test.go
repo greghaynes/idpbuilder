@@ -107,3 +107,31 @@ func TestReporter_EmptyPhaseClearsPreviousPhase(t *testing.T) {
 		t.Errorf("Expected description to be 'test', got %s", reporter.steps[0].SubSteps[0].Description)
 	}
 }
+
+// Test that error phases result in failed state
+func TestReporter_ErrorPhases(t *testing.T) {
+	reporter := NewReporter(false)
+	reporter.AddStep("packages", "Installing packages")
+	reporter.StartStep("packages")
+
+	reporter.AddSubStep("packages", "argocd", "argocd")
+
+	// Test that ConfigurationError with StateFailed shows the correct state
+	reporter.UpdateSubStepWithPhase("packages", "argocd", 3, "ConfigurationError") // StateFailed = 3
+	if reporter.steps[0].SubSteps[0].State != StateFailed {
+		t.Errorf("Expected argocd to be in StateFailed, got %v", reporter.steps[0].SubSteps[0].State)
+	}
+	if !strings.Contains(reporter.steps[0].SubSteps[0].Description, "ConfigurationError") {
+		t.Errorf("Expected description to contain 'ConfigurationError', got %s", reporter.steps[0].SubSteps[0].Description)
+	}
+
+	// Test that Failed phase with StateFailed shows the correct state
+	reporter.AddSubStep("packages", "gitea", "gitea")
+	reporter.UpdateSubStepWithPhase("packages", "gitea", 3, "Failed") // StateFailed = 3
+	if reporter.steps[0].SubSteps[1].State != StateFailed {
+		t.Errorf("Expected gitea to be in StateFailed, got %v", reporter.steps[0].SubSteps[1].State)
+	}
+	if !strings.Contains(reporter.steps[0].SubSteps[1].Description, "Failed") {
+		t.Errorf("Expected description to contain 'Failed', got %s", reporter.steps[0].SubSteps[1].Description)
+	}
+}
