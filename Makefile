@@ -129,6 +129,7 @@ $(CRD_REF_DOCS): $(LOCALBIN)
 
 .PHONY: api-docs
 api-docs: crd-ref-docs ## Generate API reference documentation from CRDs.
+	@mkdir -p ./docs/api
 	$(CRD_REF_DOCS) \
 		--source-path=./api \
 		--config=./hack/api-docs-config.yaml \

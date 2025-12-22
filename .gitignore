@@ -17,3 +17,6 @@ package-lock.json
 # Generated example HTML pages (generated from YAML by scripts/generate-example-pages.js)
 site/docs/examples/*.html
 site/docs/examples/v1alpha2/*.html
+
+# Generated API reference documentation (generated from CRD types by crd-ref-docs)
+docs/api/reference.md
