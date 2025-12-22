@@ -1,12 +1,108 @@
 #!/usr/bin/env node
 
 /**
- * Generate API overview page
+ * Generate API overview page from CRD YAML files
  */
 
 const fs = require('fs');
 const path = require('path');
 
+// Simple YAML parser for CRD files
+function parseCRDYaml(content) {
+    const crds = [];
+    const docs = content.split(/^---$/m).filter(d => d.trim());
+    
+    for (const doc of docs) {
+        const lines = doc.split('\n');
+        let crd = { metadata: {}, spec: { names: {}, versions: [] } };
+        let inSpec = false;
+        let inVersions = false;
+        let currentVersion = null;
+        
+        for (const line of lines) {
+            if (line.match(/^kind:\s*CustomResourceDefinition/)) {
+                crd.kind = 'CustomResourceDefinition';
+            } else if (line.match(/^spec:/)) {
+                inSpec = true;
+            } else if (inSpec && line.match(/^\s{2}group:\s*(.+)/)) {
+                crd.spec.group = line.match(/group:\s*(.+)/)[1].trim();
+            } else if (inSpec && line.match(/^\s{4}kind:\s*(.+)/)) {
+                crd.spec.names.kind = line.match(/kind:\s*(.+)/)[1].trim();
+            } else if (inSpec && line.match(/^\s{4}plural:\s*(.+)/)) {
+                crd.spec.names.plural = line.match(/plural:\s*(.+)/)[1].trim();
+            } else if (inSpec && line.match(/^\s{2}versions:/)) {
+                inVersions = true;
+            } else if (inVersions && line.match(/^\s{2,4}- name:\s*(.+)/)) {
+                if (currentVersion) {
+                    crd.spec.versions.push(currentVersion);
+                }
+                currentVersion = { name: line.match(/name:\s*(.+)/)[1].trim() };
+            } else if (inVersions && line.match(/^\s{4}name:\s*(.+)/) && !currentVersion) {
+                // Handle non-list format
+                currentVersion = { name: line.match(/name:\s*(.+)/)[1].trim() };
+            } else if (currentVersion && line.match(/^\s{8,12}description:\s*(.+)/)) {
+                currentVersion.description = line.match(/description:\s*(.+)/)[1].trim();
+            }
+        }
+        
+        if (currentVersion) {
+            crd.spec.versions.push(currentVersion);
+        }
+        
+        if (crd.kind === 'CustomResourceDefinition' && crd.spec.names.kind) {
+            crds.push(crd);
+        }
+    }
+    
+    return crds;
+}
+
+// Read and parse all CRD YAML files
+const crdDir = path.join(__dirname, '../pkg/controllers/resources');
+const crdFiles = fs.readdirSync(crdDir).filter(f => f.endsWith('.yaml') && f.startsWith('idpbuilder.cnoe.io_'));
+
+const allCrds = [];
+for (const file of crdFiles) {
+    const content = fs.readFileSync(path.join(crdDir, file), 'utf8');
+    const crds = parseCRDYaml(content);
+    allCrds.push(...crds);
+}
+
+// Extract CRD info
+const crdInfo = allCrds.map(crd => {
+    const version = crd.spec.versions[0] || {};
+    return {
+        kind: crd.spec.names.kind,
+        group: crd.spec.group,
+        apiVersion: version.name,
+        description: version.description || `${crd.spec.names.kind} is the Schema for the ${crd.spec.names.plural} API`,
+        plural: crd.spec.names.plural,
+        anchor: crd.spec.names.kind.toLowerCase()
+    };
+});
+
+// Group CRDs by API version
+const v1alpha1 = crdInfo.filter(c => c.apiVersion === 'v1alpha1');
+const v1alpha2 = crdInfo.filter(c => c.apiVersion === 'v1alpha2');
+
+// Generate CRD list HTML for a version
+function generateCRDList(crds) {
+    return crds.map(crd => 
+        `                        <li><code>${crd.kind}</code> - ${crd.description}</li>`
+    ).join('\n');
+}
+
+// Generate CRD cards for detailed info
+function generateCRDCards(crds) {
+    return crds.map(crd => `
+                <div class="api-card">
+                    <h4>${crd.kind}</h4>
+                    <p>${crd.description}</p>
+                    <p><a href="/docs/api/reference.html#${crd.anchor}">View ${crd.kind} reference →</a></p>
+                </div>`).join('\n');
+}
+
+// Generate HTML
 const apiPageContent = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -87,7 +183,7 @@ const apiPageContent = `<!DOCTYPE html>
             border-radius: 5px;
             margin-bottom: 1.5rem;
         }
-        .api-card h3 {
+        .api-card h3, .api-card h4 {
             margin-top: 0;
             margin-bottom: 0.5rem;
         }
@@ -158,11 +254,11 @@ const apiPageContent = `<!DOCTYPE html>
 
             <article class="docs-content">
                 <h1>API Reference</h1>
-                <p>IDP Builder provides several Custom Resource Definitions (CRDs) that allow you to declaratively manage your internal developer platform on Kubernetes.</p>
+                <p>IDP Builder provides ${crdInfo.length} Custom Resource Definitions (CRDs) that allow you to declaratively manage your internal developer platform on Kubernetes.</p>
                 
                 <div style="background-color: var(--bg-alt); padding: 1rem; border-radius: 5px; margin-bottom: 2rem;">
                     <h3 style="margin-top: 0;">📖 About This Documentation</h3>
-                    <p style="margin-bottom: 0;">This API reference is automatically generated from the Go source code using standard Kubernetes tooling (<code>crd-ref-docs</code>). It provides detailed information about all fields, types, and validation rules for each Custom Resource.</p>
+                    <p style="margin-bottom: 0;">This API reference is automatically generated from the CRD definitions. It provides detailed information about all fields, types, and validation rules for each Custom Resource.</p>
                 </div>
 
                 <h2>API Versions</h2>
@@ -171,58 +267,24 @@ const apiPageContent = `<!DOCTYPE html>
                 <div class="api-card">
                     <h3>v1alpha1</h3>
                     <p><strong>Status:</strong> Deprecated (transitioning to v1alpha2)</p>
-                    <p>The original API version with monolithic resources. Includes:</p>
+                    <p>The original API version with monolithic resources. Includes ${v1alpha1.length} resource(s):</p>
                     <ul>
-                        <li><code>Localbuild</code> - Legacy all-in-one resource</li>
-                        <li><code>CustomPackage</code> - Package management</li>
-                        <li><code>GitRepository</code> - Git repository management</li>
+${generateCRDList(v1alpha1)}
                     </ul>
                 </div>
 
                 <div class="api-card">
                     <h3>v1alpha2</h3>
                     <p><strong>Status:</strong> Current (recommended)</p>
-                    <p>The new modular architecture with pluggable providers. Includes:</p>
+                    <p>The new modular architecture with pluggable providers. Includes ${v1alpha2.length} resource(s):</p>
                     <ul>
-                        <li><code>Platform</code> - Main platform orchestration resource</li>
-                        <li><code>GiteaProvider</code> - In-cluster Git server provider</li>
-                        <li><code>NginxGateway</code> - Nginx Ingress gateway provider</li>
-                        <li><code>ArgoCDProvider</code> - ArgoCD GitOps provider</li>
+${generateCRDList(v1alpha2)}
                     </ul>
                 </div>
 
                 <h2>Custom Resources</h2>
-                
-                <h3>Platform (v1alpha2)</h3>
-                <p>The <code>Platform</code> resource is the main entry point for defining your IDP. It orchestrates multiple providers and manages the overall platform lifecycle.</p>
-                <p><strong>Key Features:</strong></p>
-                <ul>
-                    <li>References multiple provider types (Git, Gateway, GitOps)</li>
-                    <li>Manages platform-wide configuration</li>
-                    <li>Provides status information about component health</li>
-                </ul>
-                <p><a href="/docs/api/reference.html#platform">View detailed Platform API reference →</a></p>
-
-                <h3>Provider Resources (v1alpha2)</h3>
-                <p>Provider resources represent specific platform components that can be plugged into a Platform:</p>
-                
-                <div class="api-card">
-                    <h4>GiteaProvider</h4>
-                    <p>Deploys and manages an in-cluster Gitea Git server with automatic configuration for repositories, organizations, and users.</p>
-                    <p><a href="/docs/api/reference.html#giteaprovider">View GiteaProvider reference →</a></p>
-                </div>
-
-                <div class="api-card">
-                    <h4>NginxGateway</h4>
-                    <p>Deploys and configures Nginx Ingress Controller for routing traffic to platform components.</p>
-                    <p><a href="/docs/api/reference.html#nginxgateway">View NginxGateway reference →</a></p>
-                </div>
-
-                <div class="api-card">
-                    <h4>ArgoCDProvider</h4>
-                    <p>Deploys and configures ArgoCD for GitOps-based application deployment and management.</p>
-                    <p><a href="/docs/api/reference.html#argocdprovider">View ArgoCDProvider reference →</a></p>
-                </div>
+                <p>The following Custom Resources are available:</p>
+${generateCRDCards(crdInfo)}
 
                 <h2>Using the API</h2>
                 <p>You can create these resources in two ways:</p>
@@ -286,3 +348,4 @@ if (!fs.existsSync(outputDir)) {
 // Write the file
 fs.writeFileSync(outputPath, apiPageContent);
 console.log(`Generated: ${outputPath}`);
+console.log(`Found ${crdInfo.length} CRDs (${v1alpha1.length} v1alpha1, ${v1alpha2.length} v1alpha2)`);
