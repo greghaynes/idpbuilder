@@ -26,6 +26,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
+const (
+	defaultRequeueTime = time.Second * 30
+)
+
 // ArgoCDProviderReconciler reconciles an ArgoCDProvider object
 type ArgoCDProviderReconciler struct {
 	client.Client
@@ -71,7 +75,7 @@ func (r *ArgoCDProviderReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		if err := r.Status().Update(ctx, argocdProvider); err != nil {
 			return ctrl.Result{}, err
 		}
-		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+		return ctrl.Result{RequeueAfter: defaultRequeueTime}, nil
 	}
 
 	// Get Platform resource for configuration discovery
@@ -94,7 +98,7 @@ func (r *ArgoCDProviderReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 			if err := r.Status().Update(ctx, argocdProvider); err != nil {
 				return ctrl.Result{}, err
 			}
-			return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+			return ctrl.Result{RequeueAfter: defaultRequeueTime}, nil
 		}
 		logger.Error(err, "Failed to get Platform", "platform", platformRef.Name)
 		return ctrl.Result{}, err
@@ -159,7 +163,7 @@ func (r *ArgoCDProviderReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		if statusErr := r.Status().Update(ctx, argocdProvider); statusErr != nil {
 			logger.Error(statusErr, "Failed to update status after readiness check")
 		}
-		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+		return ctrl.Result{RequeueAfter: defaultRequeueTime}, nil
 	}
 
 	if !ready {
@@ -175,7 +179,7 @@ func (r *ArgoCDProviderReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		if err := r.Status().Update(ctx, argocdProvider); err != nil {
 			logger.Error(err, "Failed to update status")
 		}
-		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+		return ctrl.Result{RequeueAfter: defaultRequeueTime}, nil
 	}
 
 	// Update status with duck-typed fields
