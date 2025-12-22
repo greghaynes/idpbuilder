@@ -180,10 +180,10 @@ func TestBuildConfigFromSpec(t *testing.T) {
 				Spec: v1alpha2.GiteaProviderSpec{},
 			},
 			expected: v1alpha1.BuildCustomizationSpec{
-				Protocol:       "http",
+				Protocol:       "https",
 				Host:           "cnoe.localtest.me",
 				IngressHost:    "cnoe.localtest.me",
-				Port:           "8080",
+				Port:           "8443",
 				UsePathRouting: false,
 			},
 		},
@@ -195,10 +195,10 @@ func TestBuildConfigFromSpec(t *testing.T) {
 				},
 			},
 			expected: v1alpha1.BuildCustomizationSpec{
-				Protocol:       "http",
+				Protocol:       "https",
 				Host:           "my-custom-host.com",
 				IngressHost:    "my-custom-host.com",
-				Port:           "8080",
+				Port:           "8443",
 				UsePathRouting: false,
 			},
 		},
@@ -1054,7 +1054,7 @@ func TestGiteaProviderReconciler_ConfigurationVariations(t *testing.T) {
 				Namespace: "gitea",
 			},
 			wantHost: "cnoe.localtest.me",
-			wantPort: "8080",
+			wantPort: "8443",
 		},
 	}
 
@@ -1701,9 +1701,9 @@ func TestGiteaProviderReconciler_ProtocolDefaults(t *testing.T) {
 		expectedProtocol string
 	}{
 		{
-			name:             "empty protocol defaults to http",
+			name:             "empty protocol defaults to https",
 			specProtocol:     "",
-			expectedProtocol: "http",
+			expectedProtocol: "https",
 		},
 		{
 			name:             "https protocol is preserved",
@@ -2113,9 +2113,9 @@ func TestGiteaProviderReconciler_PortDefaults(t *testing.T) {
 		expectedPort string
 	}{
 		{
-			name:         "empty port defaults to 8080",
+			name:         "empty port defaults to 8443",
 			specPort:     "",
-			expectedPort: "8080",
+			expectedPort: "8443",
 		},
 		{
 			name:         "custom port is preserved",
