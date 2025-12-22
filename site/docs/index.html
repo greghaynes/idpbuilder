@@ -139,15 +139,23 @@
     <main class="container">
         <div class="docs-container">
             <aside class="docs-sidebar">
-                <h3>Documentation</h3>
+                <h3>Getting Started</h3>
                 <ul>
                     <li><a href="/docs" class="active">Overview</a></li>
-                    <li><a href="#architecture">Architecture</a></li>
                     <li><a href="#installation">Installation</a></li>
-                    <li><a href="#getting-started">Getting Started</a></li>
+                    <li><a href="#getting-started">Quick Start</a></li>
                     <li><a href="#requirements">Requirements</a></li>
                     <li><a href="#configuration">Configuration</a></li>
+                    <li><a href="#architecture">Architecture</a></li>
                 </ul>
+                
+                <details open>
+                    <summary>User Guides</summary>
+                    <ul>
+                        <li><a href="/docs/user/minimum-requirements.html">Minimum Requirements</a></li>
+                        <li><a href="/docs/user/private-registries.html">Private Registries</a></li>
+                    </ul>
+                </details>
                 
                 <details open>
                     <summary>Examples</summary>
@@ -165,6 +173,13 @@
                         <li><a href="/docs/examples/v1alpha2/platform-with-gateway.html">Platform with Gateway</a></li>
                         <li><a href="/docs/examples/v1alpha2/giteaprovider.html">GiteaProvider</a></li>
                         <li><a href="/docs/examples/v1alpha2/nginxgateway.html">NginxGateway</a></li>
+                    </ul>
+                </details>
+                
+                <details>
+                    <summary>API Reference</summary>
+                    <ul>
+                        <li><a href="/docs/api/reference.html">CRD Reference</a></li>
                     </ul>
                 </details>
                 
@@ -190,21 +205,6 @@
                     </ul>
                 </details>
                 
-                <details>
-                    <summary>User Guides</summary>
-                    <ul>
-                        <li><a href="/docs/user/minimum-requirements.html">Minimum Requirements</a></li>
-                        <li><a href="/docs/user/private-registries.html">Private Registries</a></li>
-                    </ul>
-                </details>
-                
-                <details>
-                    <summary>API Reference</summary>
-                    <ul>
-                        <li><a href="/docs/api/reference.html">CRD Reference</a></li>
-                    </ul>
-                </details>
-                
                 <h3>External Links</h3>
                 <ul>
                     <li><a href="#contributing">Contributing</a></li>
@@ -218,13 +218,16 @@
                 
                 <div style="background-color: var(--bg-alt); padding: 1rem; border-radius: 5px; margin-bottom: 2rem;">
                     <h3 style="margin-top: 0;">📚 Documentation Structure</h3>
-                    <p style="margin-bottom: 0.5rem;">Our documentation is organized into three main categories:</p>
+                    <p style="margin-bottom: 0.5rem;">Our documentation is organized to help you quickly find what you need:</p>
                     <ul style="margin-bottom: 0;">
+                        <li><strong>Getting Started:</strong> Quick installation and setup to get you running fast</li>
+                        <li><strong>User Guides:</strong> Practical guides for end-users and platform configuration</li>
+                        <li><strong>Examples:</strong> Real-world usage patterns and sample configurations</li>
+                        <li><strong>API Reference:</strong> Complete Custom Resource Definition (CRD) documentation</li>
                         <li><strong>Technical Specs:</strong> Architectural design documents and specifications</li>
-                        <li><strong>Implementation Docs:</strong> Developer guides, testing information, and implementation details</li>
-                        <li><strong>User Guides:</strong> End-user documentation for using IDP Builder</li>
+                        <li><strong>Implementation Docs:</strong> Developer guides and contribution information</li>
                     </ul>
-                    <p style="margin-top: 0.5rem; margin-bottom: 0;">Browse these sections using the sidebar to find what you need.</p>
+                    <p style="margin-top: 0.5rem; margin-bottom: 0;">Browse these sections using the sidebar navigation on the left.</p>
                 </div>
 
                 <h2 id="architecture">Version 2 Architecture</h2>
