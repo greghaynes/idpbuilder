@@ -211,6 +211,32 @@ func (r *Reporter) UpdateSubStep(parentName, subStepName string, state int) {
 	}
 }
 
+// UpdateSubStepWithPhase updates the state and description of a sub-step to include phase information
+func (r *Reporter) UpdateSubStepWithPhase(parentName, subStepName string, state int, phase string) {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	for i := range r.steps {
+		if r.steps[i].Name == parentName {
+			for j := range r.steps[i].SubSteps {
+				if r.steps[i].SubSteps[j].Name == subStepName {
+					r.steps[i].SubSteps[j].State = State(state)
+					// Update description to include phase
+					if phase != "" {
+						baseDesc := subStepName
+						r.steps[i].SubSteps[j].Description = fmt.Sprintf("%s (%s)", baseDesc, phase)
+					}
+					r.render()
+					return
+				}
+			}
+		}
+	}
+}
+
 // render updates the display with current status
 func (r *Reporter) render() {
 	isTerminal := r.isTerminal()
