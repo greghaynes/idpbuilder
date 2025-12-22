@@ -148,7 +148,7 @@ func GetHttpClient() *http.Client {
 		Timeout:   5 * time.Second,
 		KeepAlive: 30 * time.Second, // from http.DefaultTransport
 	}
-	
+
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
