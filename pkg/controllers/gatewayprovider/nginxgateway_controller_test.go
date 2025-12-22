@@ -454,9 +454,9 @@ func TestNginxGatewayReconciler_Reconcile_StatusPhaseTransition(t *testing.T) {
 	}, updatedGateway)
 	require.NoError(t, err)
 
-	// Phase should be set (either Installing or Failed due to manifest parsing)
+	// Phase should be set (either WaitingForPlatform initially, or Installing/Failed if Platform owner exists)
 	assert.NotEmpty(t, updatedGateway.Status.Phase)
-	assert.Contains(t, []string{"Installing", "Failed"}, updatedGateway.Status.Phase)
+	assert.Contains(t, []string{"WaitingForPlatform", "Installing", "Failed"}, updatedGateway.Status.Phase)
 }
 
 func TestNginxGatewayReconciler_Reconcile_RequeueWhenNotReady(t *testing.T) {

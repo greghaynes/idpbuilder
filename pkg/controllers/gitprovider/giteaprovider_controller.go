@@ -12,6 +12,7 @@ import (
 	"github.com/cnoe-io/idpbuilder/pkg/k8s"
 	"github.com/cnoe-io/idpbuilder/pkg/resources/gitea"
 	"github.com/cnoe-io/idpbuilder/pkg/util"
+	providerutil "github.com/cnoe-io/idpbuilder/pkg/util/provider"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -83,6 +84,59 @@ func (r *GiteaProviderReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	if !provider.DeletionTimestamp.IsZero() {
 		return r.handleDeletion(ctx, provider)
 	}
+
+	// Check for Platform owner reference - providers must wait for Platform to add ownership
+	platformRef := providerutil.GetPlatformOwnerReference(provider)
+	if platformRef == nil {
+		logger.Info("Waiting for Platform to add owner reference")
+		meta.SetStatusCondition(&provider.Status.Conditions, metav1.Condition{
+			Type:    "Ready",
+			Status:  metav1.ConditionFalse,
+			Reason:  "WaitingForPlatform",
+			Message: "Waiting for Platform resource to add owner reference",
+		})
+		provider.Status.Phase = "WaitingForPlatform"
+		if err := r.Status().Update(ctx, provider); err != nil {
+			if errors.IsConflict(err) {
+				return ctrl.Result{}, err
+			}
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{RequeueAfter: defaultRequeueTime}, nil
+	}
+
+	// Get Platform resource for configuration discovery
+	platform := &v1alpha2.Platform{}
+	platformKey := types.NamespacedName{
+		Name:      platformRef.Name,
+		Namespace: provider.Namespace,
+	}
+	if err := r.Get(ctx, platformKey, platform); err != nil {
+		if errors.IsNotFound(err) {
+			logger.Info("Platform resource not found", "platform", platformRef.Name)
+			meta.SetStatusCondition(&provider.Status.Conditions, metav1.Condition{
+				Type:    "Ready",
+				Status:  metav1.ConditionFalse,
+				Reason:  "PlatformNotFound",
+				Message: fmt.Sprintf("Platform %s not found", platformRef.Name),
+			})
+			provider.Status.Phase = "ConfigurationError"
+			if err := r.Status().Update(ctx, provider); err != nil {
+				if errors.IsConflict(err) {
+					return ctrl.Result{}, err
+				}
+				return ctrl.Result{}, err
+			}
+			return ctrl.Result{RequeueAfter: defaultRequeueTime}, nil
+		}
+		logger.Error(err, "Failed to get Platform", "platform", platformRef.Name)
+		return ctrl.Result{}, err
+	}
+
+	// Discover configuration from Platform (for future use)
+	// In the future, we could discover host, protocol, etc. from Platform.Spec.Domain
+	// For now, we just log that we have Platform access
+	logger.V(1).Info("Platform configuration available", "domain", platform.Spec.Domain)
 
 	// Update phase to Installing if not set
 	if provider.Status.Phase == "" {

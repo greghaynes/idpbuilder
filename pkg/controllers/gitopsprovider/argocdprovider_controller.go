@@ -12,6 +12,7 @@ import (
 	"github.com/cnoe-io/idpbuilder/globals"
 	"github.com/cnoe-io/idpbuilder/pkg/controllers/localbuild"
 	"github.com/cnoe-io/idpbuilder/pkg/k8s"
+	providerutil "github.com/cnoe-io/idpbuilder/pkg/util/provider"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -23,6 +24,10 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+)
+
+const (
+	defaultRequeueTime = time.Second * 30
 )
 
 // ArgoCDProviderReconciler reconciles an ArgoCDProvider object
@@ -54,6 +59,53 @@ func (r *ArgoCDProviderReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		logger.Error(err, "Failed to get ArgoCDProvider")
 		return ctrl.Result{}, err
 	}
+
+	// Check for Platform owner reference - providers must wait for Platform to add ownership
+	platformRef := providerutil.GetPlatformOwnerReference(argocdProvider)
+	if platformRef == nil {
+		logger.Info("Waiting for Platform to add owner reference")
+		meta.SetStatusCondition(&argocdProvider.Status.Conditions, metav1.Condition{
+			Type:               "Ready",
+			Status:             metav1.ConditionFalse,
+			Reason:             "WaitingForPlatform",
+			Message:            "Waiting for Platform resource to add owner reference",
+			LastTransitionTime: metav1.Now(),
+		})
+		argocdProvider.Status.Phase = "WaitingForPlatform"
+		if err := r.Status().Update(ctx, argocdProvider); err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{RequeueAfter: defaultRequeueTime}, nil
+	}
+
+	// Get Platform resource for configuration discovery
+	platform := &v1alpha2.Platform{}
+	platformKey := types.NamespacedName{
+		Name:      platformRef.Name,
+		Namespace: argocdProvider.Namespace,
+	}
+	if err := r.Get(ctx, platformKey, platform); err != nil {
+		if apierrors.IsNotFound(err) {
+			logger.Info("Platform resource not found", "platform", platformRef.Name)
+			meta.SetStatusCondition(&argocdProvider.Status.Conditions, metav1.Condition{
+				Type:               "Ready",
+				Status:             metav1.ConditionFalse,
+				Reason:             "PlatformNotFound",
+				Message:            fmt.Sprintf("Platform %s not found", platformRef.Name),
+				LastTransitionTime: metav1.Now(),
+			})
+			argocdProvider.Status.Phase = "ConfigurationError"
+			if err := r.Status().Update(ctx, argocdProvider); err != nil {
+				return ctrl.Result{}, err
+			}
+			return ctrl.Result{RequeueAfter: defaultRequeueTime}, nil
+		}
+		logger.Error(err, "Failed to get Platform", "platform", platformRef.Name)
+		return ctrl.Result{}, err
+	}
+
+	// Discover configuration from Platform (for future use)
+	logger.V(1).Info("Platform configuration available", "domain", platform.Spec.Domain)
 
 	// Set initial status if not set
 	if argocdProvider.Status.Phase == "" {
@@ -111,7 +163,7 @@ func (r *ArgoCDProviderReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		if statusErr := r.Status().Update(ctx, argocdProvider); statusErr != nil {
 			logger.Error(statusErr, "Failed to update status after readiness check")
 		}
-		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+		return ctrl.Result{RequeueAfter: defaultRequeueTime}, nil
 	}
 
 	if !ready {
@@ -127,7 +179,7 @@ func (r *ArgoCDProviderReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		if err := r.Status().Update(ctx, argocdProvider); err != nil {
 			logger.Error(err, "Failed to update status")
 		}
-		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+		return ctrl.Result{RequeueAfter: defaultRequeueTime}, nil
 	}
 
 	// Update status with duck-typed fields

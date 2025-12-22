@@ -397,9 +397,9 @@ func TestGiteaProviderReconciler_PhaseTransitions(t *testing.T) {
 		expectedPhase string
 	}{
 		{
-			name:          "empty phase transitions to Installing",
+			name:          "empty phase transitions to WaitingForPlatform",
 			initialPhase:  "",
-			expectedPhase: "Installing",
+			expectedPhase: "WaitingForPlatform",
 		},
 	}
 
@@ -1842,10 +1842,29 @@ func TestGiteaProviderReconciler_ReconcileWithExistingNamespace(t *testing.T) {
 func TestGiteaProviderReconciler_ReconcileFullCycle(t *testing.T) {
 	scheme := k8s.GetScheme()
 
+	// Create a mock Platform to serve as owner (must be in same namespace as provider)
+	platform := &v1alpha2.Platform{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-platform",
+			Namespace: "gitea",
+			UID:       "test-platform-uid",
+		},
+	}
+
+	falseVal := false
 	provider := &v1alpha2.GiteaProvider{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-gitea",
 			Namespace: "gitea",
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion: "idpbuilder.cnoe.io/v1alpha2",
+					Kind:       "Platform",
+					Name:       platform.Name,
+					UID:        platform.UID,
+					Controller: &falseVal,
+				},
+			},
 		},
 		Spec: v1alpha2.GiteaProviderSpec{
 			Namespace: "gitea",
@@ -1861,8 +1880,8 @@ func TestGiteaProviderReconciler_ReconcileFullCycle(t *testing.T) {
 
 	fakeClient := fake.NewClientBuilder().
 		WithScheme(scheme).
-		WithObjects(provider).
-		WithStatusSubresource(&v1alpha2.GiteaProvider{}).
+		WithObjects(provider, platform).
+		WithStatusSubresource(&v1alpha2.GiteaProvider{}, &v1alpha2.Platform{}).
 		Build()
 
 	reconciler := &GiteaProviderReconciler{

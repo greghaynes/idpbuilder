@@ -34,8 +34,9 @@ type PlatformReconciler struct {
 //+kubebuilder:rbac:groups=idpbuilder.cnoe.io,resources=platforms,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=idpbuilder.cnoe.io,resources=platforms/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=idpbuilder.cnoe.io,resources=platforms/finalizers,verbs=update
-//+kubebuilder:rbac:groups=idpbuilder.cnoe.io,resources=giteaproviders,verbs=get;list;watch
-//+kubebuilder:rbac:groups=idpbuilder.cnoe.io,resources=nginxgateways,verbs=get;list;watch
+//+kubebuilder:rbac:groups=idpbuilder.cnoe.io,resources=giteaproviders,verbs=get;list;watch;update;patch
+//+kubebuilder:rbac:groups=idpbuilder.cnoe.io,resources=nginxgateways,verbs=get;list;watch;update;patch
+//+kubebuilder:rbac:groups=idpbuilder.cnoe.io,resources=argocdproviders,verbs=get;list;watch;update;patch
 
 // Reconcile is part of the main kubernetes reconciliation loop
 func (r *PlatformReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -74,6 +75,12 @@ func (r *PlatformReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		}
 	}
 
+	// Establish owner references to all provider CRs
+	if err := r.ensureProviderOwnerReferences(ctx, platform); err != nil {
+		logger.Error(err, "Failed to ensure provider owner references")
+		return ctrl.Result{RequeueAfter: defaultRequeueTime}, nil
+	}
+
 	// Aggregate provider statuses
 	allReady := true
 
@@ -96,6 +103,17 @@ func (r *PlatformReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	}
 	platform.Status.Providers.Gateways = gatewayStatuses
 	if !gatewayReady {
+		allReady = false
+	}
+
+	// Aggregate GitOps Providers
+	gitopsStatuses, gitopsReady, err := r.aggregateGitOpsProviders(ctx, platform)
+	if err != nil {
+		logger.Error(err, "Failed to aggregate gitops providers")
+		return ctrl.Result{RequeueAfter: defaultRequeueTime}, nil
+	}
+	platform.Status.Providers.GitOpsProviders = gitopsStatuses
+	if !gitopsReady {
 		allReady = false
 	}
 
@@ -246,6 +264,147 @@ func (r *PlatformReconciler) aggregateGateways(ctx context.Context, platform *v1
 	}
 
 	return summaries, allReady, nil
+}
+
+// aggregateGitOpsProviders aggregates status from all GitOps providers
+func (r *PlatformReconciler) aggregateGitOpsProviders(ctx context.Context, platform *v1alpha2.Platform) ([]v1alpha2.ProviderStatusSummary, bool, error) {
+	logger := log.FromContext(ctx)
+	summaries := []v1alpha2.ProviderStatusSummary{}
+	allReady := true
+
+	for _, gitopsProviderRef := range platform.Spec.Components.GitOpsProviders {
+		// Fetch provider using unstructured client to support duck-typing
+		gvk := schema.GroupVersionKind{
+			Group:   "idpbuilder.cnoe.io",
+			Version: "v1alpha2",
+			Kind:    gitopsProviderRef.Kind,
+		}
+
+		providerObj := &unstructured.Unstructured{}
+		providerObj.SetGroupVersionKind(gvk)
+
+		err := r.Get(ctx, types.NamespacedName{
+			Name:      gitopsProviderRef.Name,
+			Namespace: gitopsProviderRef.Namespace,
+		}, providerObj)
+
+		if err != nil {
+			if errors.IsNotFound(err) {
+				logger.Info("GitOps provider not found", "name", gitopsProviderRef.Name, "kind", gitopsProviderRef.Kind)
+				summaries = append(summaries, v1alpha2.ProviderStatusSummary{
+					Name:  gitopsProviderRef.Name,
+					Kind:  gitopsProviderRef.Kind,
+					Ready: false,
+				})
+				allReady = false
+				continue
+			}
+			return nil, false, fmt.Errorf("getting gitops provider %s: %w", gitopsProviderRef.Name, err)
+		}
+
+		// Extract status using duck-typing
+		ready, err := provider.IsGitOpsProviderReady(providerObj)
+		if err != nil {
+			logger.Error(err, "Failed to check gitops provider readiness", "name", gitopsProviderRef.Name)
+			ready = false
+		}
+
+		summaries = append(summaries, v1alpha2.ProviderStatusSummary{
+			Name:  gitopsProviderRef.Name,
+			Kind:  gitopsProviderRef.Kind,
+			Ready: ready,
+		})
+
+		if !ready {
+			allReady = false
+		}
+	}
+
+	return summaries, allReady, nil
+}
+
+// ensureProviderOwnerReferences ensures that all provider CRs have the Platform as an owner reference
+func (r *PlatformReconciler) ensureProviderOwnerReferences(ctx context.Context, platform *v1alpha2.Platform) error {
+	// Process all Git providers
+	for _, providerRef := range platform.Spec.Components.GitProviders {
+		if err := r.ensureOwnerReference(ctx, platform, providerRef); err != nil {
+			return err
+		}
+	}
+
+	// Process all Gateway providers
+	for _, providerRef := range platform.Spec.Components.Gateways {
+		if err := r.ensureOwnerReference(ctx, platform, providerRef); err != nil {
+			return err
+		}
+	}
+
+	// Process all GitOps providers
+	for _, providerRef := range platform.Spec.Components.GitOpsProviders {
+		if err := r.ensureOwnerReference(ctx, platform, providerRef); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// ensureOwnerReference ensures that a specific provider CR has the Platform as an owner reference
+func (r *PlatformReconciler) ensureOwnerReference(ctx context.Context, platform *v1alpha2.Platform, providerRef v1alpha2.ProviderReference) error {
+	logger := log.FromContext(ctx)
+
+	// Fetch provider as unstructured (works for any provider type)
+	provider := &unstructured.Unstructured{}
+	provider.SetGroupVersionKind(schema.GroupVersionKind{
+		Group:   "idpbuilder.cnoe.io",
+		Version: "v1alpha2",
+		Kind:    providerRef.Kind,
+	})
+
+	key := types.NamespacedName{
+		Name:      providerRef.Name,
+		Namespace: providerRef.Namespace,
+	}
+
+	if err := r.Get(ctx, key, provider); err != nil {
+		if errors.IsNotFound(err) {
+			logger.Info("Provider not found, skipping owner reference", "name", providerRef.Name, "kind", providerRef.Kind)
+			return nil
+		}
+		return fmt.Errorf("getting provider %s/%s: %w", providerRef.Kind, providerRef.Name, err)
+	}
+
+	// Check if Platform is already an owner
+	hasOwnerRef := false
+	for _, ref := range provider.GetOwnerReferences() {
+		if ref.UID == platform.UID {
+			hasOwnerRef = true
+			break
+		}
+	}
+
+	if !hasOwnerRef {
+		// Add Platform as owner reference (non-controller owner)
+		ownerRef := metav1.OwnerReference{
+			APIVersion: platform.APIVersion,
+			Kind:       platform.Kind,
+			Name:       platform.Name,
+			UID:        platform.UID,
+			Controller: func() *bool { b := false; return &b }(), // Not a controller owner
+		}
+
+		refs := provider.GetOwnerReferences()
+		refs = append(refs, ownerRef)
+		provider.SetOwnerReferences(refs)
+
+		if err := r.Update(ctx, provider); err != nil {
+			return fmt.Errorf("updating provider %s/%s with owner reference: %w", providerRef.Kind, providerRef.Name, err)
+		}
+
+		logger.Info("Added Platform as owner reference", "provider", providerRef.Name, "kind", providerRef.Kind)
+	}
+
+	return nil
 }
 
 // handleDeletion handles the deletion of Platform

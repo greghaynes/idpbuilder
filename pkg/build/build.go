@@ -335,7 +335,16 @@ func (b *Build) Run(ctx context.Context, recreateCluster bool) error {
 		return fmt.Errorf("creating argocdprovider resource: %w", err)
 	}
 
-	// Create Platform CR that references GiteaProvider and ArgoCDProvider
+	// Create NginxGateway CR for v2 architecture
+	setupLog.V(1).Info("Creating nginxgateway resource")
+	if err := b.createNginxGateway(ctx, kubeClient); err != nil {
+		if b.statusReporter != nil {
+			b.statusReporter.FailStep("resources", err)
+		}
+		return fmt.Errorf("creating nginxgateway resource: %w", err)
+	}
+
+	// Create Platform CR that references GiteaProvider, ArgoCDProvider, and NginxGateway
 	setupLog.V(1).Info("Creating platform resource")
 	if err := b.createPlatform(ctx, kubeClient); err != nil {
 		if b.statusReporter != nil {
@@ -439,7 +448,32 @@ func (b *Build) createArgoCDProvider(ctx context.Context, kubeClient client.Clie
 	return err
 }
 
-// createPlatform creates a Platform CR that references the GiteaProvider and ArgoCDProvider
+// createNginxGateway creates a NginxGateway CR
+func (b *Build) createNginxGateway(ctx context.Context, kubeClient client.Client) error {
+	// Ensure nginx namespace exists
+	if err := k8s.EnsureNamespace(ctx, kubeClient, globals.NginxNamespace); err != nil {
+		return fmt.Errorf("ensuring nginx namespace: %w", err)
+	}
+
+	nginxGateway := &v1alpha2.NginxGateway{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      b.name + "-nginx",
+			Namespace: globals.NginxNamespace,
+		},
+	}
+
+	_, err := controllerutil.CreateOrUpdate(ctx, kubeClient, nginxGateway, func() error {
+		nginxGateway.Spec = v1alpha2.NginxGatewaySpec{
+			Namespace: globals.NginxNamespace,
+			Version:   "1.13.0",
+		}
+		return nil
+	})
+
+	return err
+}
+
+// createPlatform creates a Platform CR that references the GiteaProvider, ArgoCDProvider, and NginxGateway
 func (b *Build) createPlatform(ctx context.Context, kubeClient client.Client) error {
 	platform := &v1alpha2.Platform{
 		ObjectMeta: metav1.ObjectMeta{
@@ -457,6 +491,13 @@ func (b *Build) createPlatform(ctx context.Context, kubeClient client.Client) er
 						Name:      b.name + "-gitea",
 						Kind:      "GiteaProvider",
 						Namespace: util.GiteaNamespace,
+					},
+				},
+				Gateways: []v1alpha2.ProviderReference{
+					{
+						Name:      b.name + "-nginx",
+						Kind:      "NginxGateway",
+						Namespace: globals.NginxNamespace,
 					},
 				},
 				GitOpsProviders: []v1alpha2.ProviderReference{

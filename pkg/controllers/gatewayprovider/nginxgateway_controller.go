@@ -9,6 +9,7 @@ import (
 	"github.com/cnoe-io/idpbuilder/api/v1alpha1"
 	"github.com/cnoe-io/idpbuilder/api/v1alpha2"
 	"github.com/cnoe-io/idpbuilder/pkg/k8s"
+	providerutil "github.com/cnoe-io/idpbuilder/pkg/util/provider"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -75,6 +76,51 @@ func (r *NginxGatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	if !gateway.DeletionTimestamp.IsZero() {
 		return r.handleDeletion(ctx, gateway)
 	}
+
+	// Check for Platform owner reference - providers must wait for Platform to add ownership
+	platformRef := providerutil.GetPlatformOwnerReference(gateway)
+	if platformRef == nil {
+		logger.Info("Waiting for Platform to add owner reference")
+		r.setCondition(gateway, metav1.Condition{
+			Type:    "Ready",
+			Status:  metav1.ConditionFalse,
+			Reason:  "WaitingForPlatform",
+			Message: "Waiting for Platform resource to add owner reference",
+		})
+		gateway.Status.Phase = "WaitingForPlatform"
+		if err := r.Status().Update(ctx, gateway); err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{RequeueAfter: defaultRequeueTime}, nil
+	}
+
+	// Get Platform resource for configuration discovery
+	platform := &v1alpha2.Platform{}
+	platformKey := types.NamespacedName{
+		Name:      platformRef.Name,
+		Namespace: gateway.Namespace,
+	}
+	if err := r.Get(ctx, platformKey, platform); err != nil {
+		if errors.IsNotFound(err) {
+			logger.Info("Platform resource not found", "platform", platformRef.Name)
+			r.setCondition(gateway, metav1.Condition{
+				Type:    "Ready",
+				Status:  metav1.ConditionFalse,
+				Reason:  "PlatformNotFound",
+				Message: fmt.Sprintf("Platform %s not found", platformRef.Name),
+			})
+			gateway.Status.Phase = "ConfigurationError"
+			if err := r.Status().Update(ctx, gateway); err != nil {
+				return ctrl.Result{}, err
+			}
+			return ctrl.Result{RequeueAfter: defaultRequeueTime}, nil
+		}
+		logger.Error(err, "Failed to get Platform", "platform", platformRef.Name)
+		return ctrl.Result{}, err
+	}
+
+	// Discover configuration from Platform (for future use)
+	logger.V(1).Info("Platform configuration available", "domain", platform.Spec.Domain)
 
 	// Update phase to Installing if not set
 	if gateway.Status.Phase == "" {
