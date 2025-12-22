@@ -32,10 +32,9 @@ func (r *LocalbuildReconciler) ReconcileNginxGateway(ctx context.Context, req ct
 	}
 
 	_, err := controllerutil.CreateOrUpdate(ctx, r.Client, nginxGateway, func() error {
-		// Set controller reference
-		if err := controllerutil.SetControllerReference(resource, nginxGateway, r.Scheme); err != nil {
-			return fmt.Errorf("setting controller reference: %w", err)
-		}
+		// NOTE: Do not set LocalBuild as owner reference here.
+		// The Platform controller will set Platform as the owner reference.
+		// Providers expect a Platform owner reference, not a LocalBuild owner reference.
 
 		// Set spec
 		nginxGateway.Spec = v1alpha2.NginxGatewaySpec{
