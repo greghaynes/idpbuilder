@@ -269,6 +269,520 @@ for _, resource := range resources {
 }
 ```
 
+### Flavor Packaging, Distribution, and Consumption
+
+Flavors leverage standard Kubernetes packaging systems rather than creating custom mechanisms. This section describes how flavors are packaged, distributed, and consumed.
+
+#### Packaging Formats
+
+**Option 1: Helm Charts (Recommended)**
+
+Flavors are packaged as Helm charts with pre-configured values files:
+
+```
+idpbuilder-flavor-basic-dev/
+├── Chart.yaml           # Helm chart metadata with dependencies
+├── values.yaml          # Default values
+├── values-examples/     # Example configurations
+│   ├── dev.yaml
+│   └── staging.yaml
+└── templates/
+    ├── platform.yaml    # Platform CR template
+    ├── gitea.yaml       # GiteaProvider CR template
+    ├── nginx.yaml       # NginxGateway CR template
+    └── argocd.yaml      # ArgoCDProvider CR template
+```
+
+Chart.yaml with controller dependencies:
+```yaml
+apiVersion: v2
+name: idpbuilder-basic-dev
+description: Basic development environment flavor for IDP Builder
+version: 1.0.0
+appVersion: "1.0"
+
+dependencies:
+  # Controllers needed for providers
+  - name: idpbuilder-controllers
+    version: "0.5.0"
+    repository: "https://cnoe-io.github.io/idpbuilder"
+    condition: controllers.install
+    
+  # Optional: Pre-install provider-specific controllers
+  - name: gitea-operator
+    version: "1.21.0"
+    repository: "https://dl.gitea.io/charts"
+    condition: gitProvider.operator.install
+```
+
+**Option 2: Kustomize Overlays**
+
+Flavors as Kustomize directory structures:
+
+```
+flavors/
+├── base/
+│   ├── kustomization.yaml
+│   ├── platform.yaml
+│   └── namespace.yaml
+├── basic-dev/
+│   ├── kustomization.yaml      # References base + patches
+│   ├── gitea-provider.yaml
+│   ├── nginx-gateway.yaml
+│   ├── argocd-provider.yaml
+│   └── patches/
+│       └── platform-domain.yaml
+└── production-aws/
+    ├── kustomization.yaml
+    ├── github-provider.yaml
+    └── patches/
+        ├── platform-tls.yaml
+        └── argocd-ha.yaml
+```
+
+kustomization.yaml example:
+```yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: idpbuilder-system
+
+# Install controllers first (via Helm or manifests)
+resources:
+  - https://github.com/cnoe-io/idpbuilder/releases/latest/download/controllers.yaml
+  - ../../base
+  - gitea-provider.yaml
+  - nginx-gateway.yaml
+  - argocd-provider.yaml
+
+patches:
+  - path: patches/platform-domain.yaml
+    target:
+      kind: Platform
+```
+
+**Option 3: OCI Artifacts**
+
+Package flavors as OCI artifacts for container registry distribution:
+
+```bash
+# Package flavor as OCI artifact
+helm package flavors/basic-dev
+helm push idpbuilder-basic-dev-1.0.0.tgz oci://ghcr.io/cnoe-io/flavors
+
+# Consume from OCI registry
+helm install my-idp oci://ghcr.io/cnoe-io/flavors/idpbuilder-basic-dev --version 1.0.0
+```
+
+#### Distribution Channels
+
+**1. Official Flavor Repository**
+
+Central catalog of curated flavors:
+
+```
+https://github.com/cnoe-io/idpbuilder-flavors/
+├── basic-dev/
+├── full-dev/
+├── production-aws/
+├── production-azure/
+├── production-gcp/
+└── index.yaml          # Helm repository index
+```
+
+**2. Helm Chart Repository**
+
+```bash
+# Add repository
+helm repo add idpbuilder https://cnoe-io.github.io/idpbuilder-flavors
+helm repo update
+
+# Search available flavors
+helm search repo idpbuilder
+
+# Install flavor
+helm install my-idp idpbuilder/basic-dev
+```
+
+**3. OCI Registry**
+
+```bash
+# List available flavors
+helm search repo oci://ghcr.io/cnoe-io/flavors
+
+# Pull flavor locally
+helm pull oci://ghcr.io/cnoe-io/flavors/idpbuilder-basic-dev --version 1.0.0
+
+# Install from OCI
+helm install my-idp oci://ghcr.io/cnoe-io/flavors/idpbuilder-basic-dev
+```
+
+**4. Git Repositories**
+
+```bash
+# Kustomize from Git
+kubectl apply -k https://github.com/cnoe-io/idpbuilder-flavors//basic-dev
+
+# ArgoCD Application
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: idpbuilder
+spec:
+  source:
+    repoURL: https://github.com/cnoe-io/idpbuilder-flavors
+    path: basic-dev
+    targetRevision: main
+```
+
+#### Controller Dependencies
+
+Flavors declare controller dependencies that must be installed before provider CRs can be reconciled.
+
+**Dependency Declaration in Helm**
+
+```yaml
+# Chart.yaml
+dependencies:
+  # Core IDP Builder controllers (always required)
+  - name: idpbuilder-controllers
+    version: "^0.5.0"
+    repository: "https://cnoe-io.github.io/idpbuilder"
+    
+  # Provider-specific controllers (conditional)
+  - name: nginx-ingress-controller
+    version: "4.8.0"
+    repository: "https://kubernetes.github.io/ingress-nginx"
+    condition: gateway.kind=NginxGateway
+    
+  - name: argocd
+    version: "5.51.0"
+    repository: "https://argoproj.github.io/argo-helm"
+    condition: gitOpsProvider.kind=ArgoCDProvider
+```
+
+**Installation Sequence with Helm Hooks**
+
+```yaml
+# templates/00-controllers.yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: idpbuilder-system
+  annotations:
+    "helm.sh/hook": pre-install
+    "helm.sh/hook-weight": "-10"
+
+---
+# Install controllers before any CRs
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: controller-installer
+  annotations:
+    "helm.sh/hook": pre-install
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation
+data:
+  install.sh: |
+    #!/bin/bash
+    # Install idpbuilder controllers
+    kubectl apply -f https://github.com/cnoe-io/idpbuilder/releases/latest/download/controllers.yaml
+    kubectl wait --for=condition=ready pod -l app=idpbuilder-controller -n idpbuilder-system --timeout=300s
+```
+
+**Installation Sequence with Kustomize**
+
+```yaml
+# kustomization.yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  # Phase 1: Controllers (with sync-wave annotations)
+  - controllers/idpbuilder-controllers.yaml
+  
+  # Phase 2: Provider CRs (depend on controllers)
+  - providers/gitea-provider.yaml
+  - providers/nginx-gateway.yaml
+  - providers/argocd-provider.yaml
+  
+  # Phase 3: Platform CR (depends on providers)
+  - platform/platform.yaml
+
+# ArgoCD sync waves for ordering
+patches:
+  - target:
+      kind: CustomResourceDefinition
+    patch: |-
+      - op: add
+        path: /metadata/annotations/argocd.argoproj.io~1sync-wave
+        value: "1"
+  
+  - target:
+      kind: Deployment
+      namespace: idpbuilder-system
+    patch: |-
+      - op: add
+        path: /metadata/annotations/argocd.argoproj.io~1sync-wave
+        value: "2"
+        
+  - target:
+      group: idpbuilder.cnoe.io
+      kind: GiteaProvider
+    patch: |-
+      - op: add
+        path: /metadata/annotations/argocd.argoproj.io~1sync-wave
+        value: "3"
+```
+
+#### Consumption Patterns
+
+**1. CLI-Driven (Development)**
+
+```bash
+# Using Helm
+idpbuilder create --flavor helm://idpbuilder/basic-dev --set domain=dev.local
+
+# Using Kustomize
+idpbuilder create --flavor kustomize://github.com/cnoe-io/idpbuilder-flavors//basic-dev
+
+# Using OCI
+idpbuilder create --flavor oci://ghcr.io/cnoe-io/flavors/basic-dev:1.0.0
+```
+
+Internally, CLI:
+1. Fetches flavor package
+2. Resolves and installs controller dependencies
+3. Applies provider and platform CRs
+4. Monitors installation progress
+
+**2. GitOps-Driven (Production)**
+
+ArgoCD Application:
+```yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: idpbuilder-platform
+  namespace: argocd
+spec:
+  project: default
+  
+  source:
+    # Helm chart flavor
+    chart: idpbuilder-basic-dev
+    repoURL: https://cnoe-io.github.io/idpbuilder-flavors
+    targetRevision: 1.0.0
+    helm:
+      values: |
+        domain: production.company.com
+        platform:
+          tls:
+            enabled: true
+            certManager: true
+  
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: idpbuilder-system
+  
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+```
+
+Flux Kustomization:
+```yaml
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: idpbuilder-platform
+  namespace: flux-system
+spec:
+  interval: 10m
+  path: ./flavors/basic-dev
+  prune: true
+  sourceRef:
+    kind: GitRepository
+    name: idpbuilder-flavors
+  healthChecks:
+    - apiVersion: idpbuilder.cnoe.io/v1alpha1
+      kind: Platform
+      name: my-platform
+      namespace: idpbuilder-system
+```
+
+**3. Direct Kubernetes Apply**
+
+```bash
+# Helm
+helm install my-idp idpbuilder/basic-dev \
+  --namespace idpbuilder-system \
+  --create-namespace \
+  --set domain=my-company.dev \
+  --wait --timeout 10m
+
+# Kustomize
+kubectl apply -k https://github.com/cnoe-io/idpbuilder-flavors//basic-dev
+
+# OCI
+helm install my-idp oci://ghcr.io/cnoe-io/flavors/idpbuilder-basic-dev \
+  --version 1.0.0 \
+  --namespace idpbuilder-system \
+  --create-namespace
+```
+
+#### Flavor Versioning and Compatibility
+
+**Semantic Versioning**
+
+```yaml
+# Chart.yaml
+version: 1.2.3  # Flavor version
+appVersion: "0.5.0"  # IDP Builder version compatibility
+
+# Version constraints
+dependencies:
+  - name: idpbuilder-controllers
+    version: "^0.5.0"  # Compatible with 0.5.x
+```
+
+**Compatibility Matrix**
+
+```yaml
+# flavor-metadata.yaml
+apiVersion: idpbuilder.cnoe.io/v1alpha1
+kind: FlavorMetadata
+metadata:
+  name: basic-dev
+spec:
+  version: 1.2.3
+  compatibility:
+    idpbuilderVersion: ">=0.5.0,<0.7.0"
+    kubernetesVersion: ">=1.26.0"
+    
+  dependencies:
+    controllers:
+      - name: idpbuilder-controllers
+        version: "0.5.0"
+        required: true
+      - name: nginx-ingress-controller
+        version: "4.8.0"
+        required: false
+        condition: gateway.kind=NginxGateway
+```
+
+#### Custom Flavor Creation
+
+Users can create custom flavors by:
+
+**1. Fork and Customize**
+
+```bash
+# Clone flavor repository
+git clone https://github.com/cnoe-io/idpbuilder-flavors
+cd idpbuilder-flavors
+
+# Copy and customize
+cp -r basic-dev my-custom-flavor
+cd my-custom-flavor
+
+# Edit Chart.yaml, values.yaml, templates
+vi values.yaml
+
+# Package and distribute
+helm package .
+helm push my-custom-flavor-1.0.0.tgz oci://myregistry.io/flavors
+```
+
+**2. Compose from Existing**
+
+```yaml
+# Chart.yaml - extend basic-dev
+apiVersion: v2
+name: my-company-dev
+version: 1.0.0
+
+dependencies:
+  - name: idpbuilder-basic-dev
+    version: "1.0.0"
+    repository: "https://cnoe-io.github.io/idpbuilder-flavors"
+  
+  # Add company-specific components
+  - name: company-monitoring
+    version: "2.1.0"
+    repository: "https://charts.company.com"
+```
+
+**3. Create from Scratch**
+
+```bash
+# Initialize new Helm chart
+helm create my-flavor
+
+# Add IDP Builder templates
+cat > templates/platform.yaml <<EOF
+apiVersion: idpbuilder.cnoe.io/v1alpha1
+kind: Platform
+metadata:
+  name: {{ .Release.Name }}
+spec:
+  domain: {{ .Values.domain }}
+  # ... rest of configuration
+EOF
+
+# Define dependencies in Chart.yaml
+# Package and distribute
+```
+
+#### Flavor Discovery and Registry
+
+**Helm Repository Index**
+
+```yaml
+# index.yaml
+apiVersion: v1
+entries:
+  idpbuilder-basic-dev:
+    - name: idpbuilder-basic-dev
+      version: 1.0.0
+      description: Basic development environment
+      urls:
+        - https://cnoe-io.github.io/idpbuilder-flavors/basic-dev-1.0.0.tgz
+      
+  idpbuilder-full-dev:
+    - name: idpbuilder-full-dev
+      version: 1.0.0
+      description: Full development environment with additional tools
+      urls:
+        - https://cnoe-io.github.io/idpbuilder-flavors/full-dev-1.0.0.tgz
+```
+
+**Flavor Catalog API**
+
+```bash
+# List available flavors
+idpbuilder flavor list
+
+# Search flavors
+idpbuilder flavor search --keyword production --cloud aws
+
+# Show flavor details
+idpbuilder flavor show basic-dev
+
+# Update flavor catalog
+idpbuilder flavor update
+```
+
 #### 3. Status Watcher
 
 **Purpose**: Monitors Platform and Provider resources and displays status to users.
