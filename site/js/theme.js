@@ -28,6 +28,8 @@
         const darkIcon = document.querySelector('.theme-toggle .dark-icon');
         
         if (lightIcon && darkIcon) {
+            // When in dark mode, show sun icon (☀️) to indicate "switch to light"
+            // When in light mode, show moon icon (🌙) to indicate "switch to dark"
             if (theme === 'dark') {
                 lightIcon.classList.add('active');
                 darkIcon.classList.remove('active');

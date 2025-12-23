@@ -10,6 +10,7 @@
     --code-bg: #f5f5f5;
     --shadow: 0 2px 4px rgba(0,0,0,0.1);
     --shadow-lg: 0 4px 12px rgba(0,0,0,0.15);
+    --shadow-hover: 0 6px 16px rgba(0,0,0,0.2);
     --warning-bg: #fff3cd;
     --warning-border: #ffc107;
     --warning-text: #856404;
@@ -28,6 +29,7 @@
     --code-bg: #2d2d2d;
     --shadow: 0 2px 4px rgba(0,0,0,0.3);
     --shadow-lg: 0 4px 12px rgba(0,0,0,0.4);
+    --shadow-hover: 0 6px 16px rgba(0,0,0,0.5);
     --warning-bg: #664d03;
     --warning-border: #997404;
     --warning-text: #ffc107;
@@ -559,7 +561,7 @@ footer a {
 
 .theme-toggle:hover {
     transform: scale(1.1);
-    box-shadow: 0 6px 16px rgba(0,0,0,0.2);
+    box-shadow: var(--shadow-hover);
 }
 
 .theme-toggle:active {
