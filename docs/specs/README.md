@@ -4,6 +4,66 @@ This directory contains technical specifications and architectural design docume
 
 ## Documents
 
+### [Client Architecture Specification](./client-architecture-spec.md)
+
+**Status:** Proposal  
+**Version:** 1.0 Draft  
+**Date:** December 23, 2024
+
+A comprehensive specification for a new unified client architecture that replaces the current localbuilder implementation and CLI. The new client provides three primary capabilities:
+
+- **Infrastructure Management** - Provisions local/remote Kubernetes infrastructure with pluggable providers (kind, k3s, external)
+- **Flavor Selection** - Enables selection of pre-defined platform configurations ("flavors") that generate appropriate Custom Resources
+- **Status Monitoring** - Watches Platform resources and provides real-time, user-friendly status information
+
+**Key Topics:**
+- Modular client component design (Infrastructure Manager, Flavor Manager, Status Watcher)
+- Flavor definition format and built-in flavors
+- New CLI command structure and UX improvements
+- Iterative implementation plan with 6 phases
+- Migration strategy from current implementation
+- Security and performance considerations
+
+**Goals:**
+- Clear separation of concerns between infrastructure, configuration, and monitoring
+- Extensible flavor system for different deployment scenarios
+- Excellent user experience with real-time feedback
+- Support for both development and production use cases
+
+**See also:**
+- [Controller Architecture Spec](./controller-architecture-spec.md) - Controller design that client orchestrates
+- [Resource Creation Sequencing](./resource-creation-sequencing.md) - How resources are tracked and sequenced
+- [Next Steps to Remove Localbuild](../implementation/next-steps-remove-localbuild.md) - Current migration plan
+
+### [Resource Creation Sequencing and State Transitions](./resource-creation-sequencing.md)
+
+**Status:** Technical Specification  
+**Version:** 1.0  
+**Date:** December 22, 2024
+
+Comprehensive technical specification for resource creation sequencing and state transitions in the idpbuilder controller-based architecture.
+
+**Key Topics:**
+- Resource creation sequence (CLI → Platform → Providers)
+- Controller-driven sequencing and state machines
+- Owner reference pattern for coordination
+- Status aggregation and monitoring
+- Cross-provider dependencies
+- Configuration discovery patterns
+- Client resource tracking implementation
+- Error handling and retry logic
+- Duck-typing for provider independence
+
+**Use Cases:**
+- Understanding controller coordination patterns
+- Implementing new providers
+- Debugging state transition issues
+- Learning the controller-based architecture
+
+**See also:**
+- [Controller Architecture Spec](./controller-architecture-spec.md) - High-level architecture design
+- [Next Steps to Remove Localbuild](../implementation/next-steps-remove-localbuild.md) - Implementation roadmap
+
 ### [Controller-Based Architecture Specification](./controller-architecture-spec.md)
 
 **Status:** Proposal  
