@@ -93,3 +93,49 @@ Keeping documentation files synced with site navigation ensures:
 2. No orphaned documentation files exist
 3. The documentation site provides a complete view of available docs
 4. Documentation updates are immediately visible on the site
+
+## sync-docs-nav.js
+
+A Node.js script that automatically syncs the documentation navigation in `site/docs/index.html` with the actual markdown files in the `docs/` directories. This script is automatically run during the site build process.
+
+### Usage
+
+```bash
+# Run manually to sync navigation
+node scripts/sync-docs-nav.js
+
+# Or it runs automatically during site build
+./build-site.sh
+```
+
+### Features
+
+- **Automatic Discovery**: Scans `docs/specs`, `docs/implementation`, and `docs/user` for all `.md` files (excluding README.md)
+- **Title Extraction**: Automatically extracts the first H1 heading from each markdown file to use as the link text
+- **Smart Fallback**: Uses a formatted filename as title if no H1 heading is found
+- **Navigation Update**: Updates the sidebar navigation in `site/docs/index.html` with proper links
+- **Category Organization**: Maintains separate sections for Technical Specs, Implementation Docs, and User Guides
+
+### How It Works
+
+1. Scans each documentation category directory for markdown files
+2. Extracts the title from the first `# Heading` in each file
+3. Generates HTML list items with proper links
+4. Updates the corresponding `<details>` sections in the site navigation
+5. Preserves the structure and styling of the navigation HTML
+
+### Integration
+
+This script is integrated into the build process via `build-site.sh`:
+- Runs after API documentation is generated
+- Runs before site files are copied to output directory
+- Ensures navigation is always up-to-date when the site is built
+
+### Output
+
+The script provides detailed console output showing:
+- Number of documents found in each category
+- Complete list of all documents being added to navigation
+- Success/failure status
+
+This automation replaces the manual process of updating navigation links whenever documentation files are added, removed, or moved.

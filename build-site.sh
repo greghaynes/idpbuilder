@@ -70,6 +70,19 @@ else
     echo "Warning: make not found. Skipping API documentation generation."
 fi
 
+# Sync documentation navigation in site files
+echo "Syncing documentation navigation..."
+if command -v node >/dev/null 2>&1; then
+    if [ -f "./scripts/sync-docs-nav.js" ]; then
+        node ./scripts/sync-docs-nav.js
+        echo "Documentation navigation synced successfully!"
+    else
+        echo "Warning: sync-docs-nav.js not found"
+    fi
+else
+    echo "Warning: Node.js not found. Skipping navigation sync."
+fi
+
 # Copy all static files
 echo "Copying static files..."
 cp -r "$BUILD_DIR"/* "$OUTPUT_DIR/"
