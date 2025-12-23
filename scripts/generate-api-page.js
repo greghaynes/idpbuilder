@@ -217,6 +217,7 @@ const apiPageContent = `<!DOCTYPE html>
             }
         }
     </style>
+    <script src="/js/theme.js"></script>
 </head>
 <body>
     <header>
@@ -310,6 +311,12 @@ ${generateCRDCards(crdInfo)}
             </article>
         </div>
     </main>
+
+    <!-- Theme Toggle Button -->
+    <button class="theme-toggle" aria-label="Toggle dark mode">
+        <span class="icon light-icon">☀️</span>
+        <span class="icon dark-icon">🌙</span>
+    </button>
 
     <footer>
         <div class="container">

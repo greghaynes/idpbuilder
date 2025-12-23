@@ -204,6 +204,7 @@ const createPageTemplate = (example) => {
     <!-- Prism.js for syntax highlighting -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/line-numbers/prism-line-numbers.min.css">
+    <script src="/js/theme.js"></script>
 </head>
 <body>
     <header>
@@ -318,6 +319,12 @@ kubectl describe ${example.yamlFile.includes('platform') ? 'platform' : example.
             </article>
         </div>
     </main>
+
+    <!-- Theme Toggle Button -->
+    <button class="theme-toggle" aria-label="Toggle dark mode">
+        <span class="icon light-icon">☀️</span>
+        <span class="icon dark-icon">🌙</span>
+    </button>
 
     <footer>
         <div class="container">
