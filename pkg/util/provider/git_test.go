@@ -33,8 +33,10 @@ func TestGetGitProviderStatus(t *testing.T) {
 						},
 						"conditions": []interface{}{
 							map[string]interface{}{
-								"type":   "Ready",
-								"status": "True",
+								"type":    "Ready",
+								"status":  "True",
+								"message": "Git provider is ready",
+								"reason":  "AllComponentsReady",
 							},
 						},
 					},
@@ -48,7 +50,9 @@ func TestGetGitProviderStatus(t *testing.T) {
 					Namespace: "gitea",
 					Key:       "token",
 				},
-				Ready: true,
+				Ready:   true,
+				Message: "Git provider is ready",
+				Reason:  "AllComponentsReady",
 			},
 			wantErr: false,
 		},
@@ -61,8 +65,10 @@ func TestGetGitProviderStatus(t *testing.T) {
 						"internalEndpoint": "http://gitea.svc.cluster.local:3000",
 						"conditions": []interface{}{
 							map[string]interface{}{
-								"type":   "Ready",
-								"status": "False",
+								"type":    "Ready",
+								"status":  "False",
+								"message": "Waiting for deployment to be ready",
+								"reason":  "DeploymentNotReady",
 							},
 						},
 					},
@@ -72,6 +78,8 @@ func TestGetGitProviderStatus(t *testing.T) {
 				Endpoint:         "https://gitea.example.com",
 				InternalEndpoint: "http://gitea.svc.cluster.local:3000",
 				Ready:            false,
+				Message:          "Waiting for deployment to be ready",
+				Reason:           "DeploymentNotReady",
 			},
 			wantErr: false,
 		},
@@ -132,6 +140,12 @@ func TestGetGitProviderStatus(t *testing.T) {
 			if got.CredentialsSecretRef.Name != tt.want.CredentialsSecretRef.Name {
 				t.Errorf("GetGitProviderStatus().CredentialsSecretRef.Name = %v, want %v",
 					got.CredentialsSecretRef.Name, tt.want.CredentialsSecretRef.Name)
+			}
+			if got.Message != tt.want.Message {
+				t.Errorf("GetGitProviderStatus().Message = %v, want %v", got.Message, tt.want.Message)
+			}
+			if got.Reason != tt.want.Reason {
+				t.Errorf("GetGitProviderStatus().Reason = %v, want %v", got.Reason, tt.want.Reason)
 			}
 		})
 	}

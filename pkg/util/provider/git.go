@@ -20,6 +20,12 @@ type GitProviderStatus struct {
 
 	// Ready indicates whether the provider is ready
 	Ready bool
+
+	// Message contains the message from the Ready condition
+	Message string
+
+	// Reason contains the reason from the Ready condition
+	Reason string
 }
 
 // SecretReference contains information to locate a secret
@@ -91,8 +97,14 @@ func GetGitProviderStatus(obj *unstructured.Unstructured) (*GitProviderStatus, e
 			condStatus, ok := condMap["status"].(string)
 			if ok && condStatus == "True" {
 				status.Ready = true
-				break
 			}
+			if message, ok := condMap["message"].(string); ok {
+				status.Message = message
+			}
+			if reason, ok := condMap["reason"].(string); ok {
+				status.Reason = reason
+			}
+			break
 		}
 	}
 

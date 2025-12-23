@@ -20,6 +20,12 @@ type GitOpsProviderStatus struct {
 
 	// Ready indicates whether the provider is ready
 	Ready bool
+
+	// Message contains the message from the Ready condition
+	Message string
+
+	// Reason contains the reason from the Ready condition
+	Reason string
 }
 
 // GetGitOpsProviderStatus extracts duck-typed status from any GitOps provider CR
@@ -84,8 +90,14 @@ func GetGitOpsProviderStatus(obj *unstructured.Unstructured) (*GitOpsProviderSta
 			condStatus, ok := condMap["status"].(string)
 			if ok && condStatus == "True" {
 				status.Ready = true
-				break
 			}
+			if message, ok := condMap["message"].(string); ok {
+				status.Message = message
+			}
+			if reason, ok := condMap["reason"].(string); ok {
+				status.Reason = reason
+			}
+			break
 		}
 	}
 

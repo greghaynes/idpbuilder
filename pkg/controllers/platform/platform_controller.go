@@ -189,19 +189,27 @@ func (r *PlatformReconciler) aggregateGitProviders(ctx context.Context, platform
 		}
 
 		// Extract status using duck-typing
-		ready, err := provider.IsGitProviderReady(providerObj)
+		status, err := provider.GetGitProviderStatus(providerObj)
 		if err != nil {
-			logger.Error(err, "Failed to check git provider readiness", "name", gitProviderRef.Name)
-			ready = false
+			logger.Error(err, "Failed to get git provider status", "name", gitProviderRef.Name)
+			summaries = append(summaries, v1alpha2.ProviderStatusSummary{
+				Name:  gitProviderRef.Name,
+				Kind:  gitProviderRef.Kind,
+				Ready: false,
+			})
+			allReady = false
+			continue
 		}
 
 		summaries = append(summaries, v1alpha2.ProviderStatusSummary{
-			Name:  gitProviderRef.Name,
-			Kind:  gitProviderRef.Kind,
-			Ready: ready,
+			Name:    gitProviderRef.Name,
+			Kind:    gitProviderRef.Kind,
+			Ready:   status.Ready,
+			Message: status.Message,
+			Reason:  status.Reason,
 		})
 
-		if !ready {
+		if !status.Ready {
 			allReady = false
 		}
 	}
@@ -246,19 +254,27 @@ func (r *PlatformReconciler) aggregateGateways(ctx context.Context, platform *v1
 		}
 
 		// Extract status using duck-typing
-		ready, err := provider.IsGatewayProviderReady(providerObj)
+		status, err := provider.GetGatewayProviderStatus(providerObj)
 		if err != nil {
-			logger.Error(err, "Failed to check gateway provider readiness", "name", gatewayRef.Name)
-			ready = false
+			logger.Error(err, "Failed to get gateway provider status", "name", gatewayRef.Name)
+			summaries = append(summaries, v1alpha2.ProviderStatusSummary{
+				Name:  gatewayRef.Name,
+				Kind:  gatewayRef.Kind,
+				Ready: false,
+			})
+			allReady = false
+			continue
 		}
 
 		summaries = append(summaries, v1alpha2.ProviderStatusSummary{
-			Name:  gatewayRef.Name,
-			Kind:  gatewayRef.Kind,
-			Ready: ready,
+			Name:    gatewayRef.Name,
+			Kind:    gatewayRef.Kind,
+			Ready:   status.Ready,
+			Message: status.Message,
+			Reason:  status.Reason,
 		})
 
-		if !ready {
+		if !status.Ready {
 			allReady = false
 		}
 	}
@@ -303,19 +319,27 @@ func (r *PlatformReconciler) aggregateGitOpsProviders(ctx context.Context, platf
 		}
 
 		// Extract status using duck-typing
-		ready, err := provider.IsGitOpsProviderReady(providerObj)
+		status, err := provider.GetGitOpsProviderStatus(providerObj)
 		if err != nil {
-			logger.Error(err, "Failed to check gitops provider readiness", "name", gitopsProviderRef.Name)
-			ready = false
+			logger.Error(err, "Failed to get gitops provider status", "name", gitopsProviderRef.Name)
+			summaries = append(summaries, v1alpha2.ProviderStatusSummary{
+				Name:  gitopsProviderRef.Name,
+				Kind:  gitopsProviderRef.Kind,
+				Ready: false,
+			})
+			allReady = false
+			continue
 		}
 
 		summaries = append(summaries, v1alpha2.ProviderStatusSummary{
-			Name:  gitopsProviderRef.Name,
-			Kind:  gitopsProviderRef.Kind,
-			Ready: ready,
+			Name:    gitopsProviderRef.Name,
+			Kind:    gitopsProviderRef.Kind,
+			Ready:   status.Ready,
+			Message: status.Message,
+			Reason:  status.Reason,
 		})
 
-		if !ready {
+		if !status.Ready {
 			allReady = false
 		}
 	}

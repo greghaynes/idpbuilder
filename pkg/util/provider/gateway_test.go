@@ -29,8 +29,10 @@ func TestGetGatewayProviderStatus(t *testing.T) {
 						"internalEndpoint":     "http://ingress-nginx-controller.ingress-nginx.svc.cluster.local",
 						"conditions": []interface{}{
 							map[string]interface{}{
-								"type":   "Ready",
-								"status": "True",
+								"type":    "Ready",
+								"status":  "True",
+								"message": "Gateway is ready",
+								"reason":  "GatewayReady",
 							},
 						},
 					},
@@ -41,6 +43,8 @@ func TestGetGatewayProviderStatus(t *testing.T) {
 				LoadBalancerEndpoint: "http://172.18.0.2",
 				InternalEndpoint:     "http://ingress-nginx-controller.ingress-nginx.svc.cluster.local",
 				Ready:                true,
+				Message:              "Gateway is ready",
+				Reason:               "GatewayReady",
 			},
 			wantErr: false,
 		},
@@ -53,8 +57,10 @@ func TestGetGatewayProviderStatus(t *testing.T) {
 						"internalEndpoint": "http://ingress-nginx-controller.ingress-nginx.svc.cluster.local",
 						"conditions": []interface{}{
 							map[string]interface{}{
-								"type":   "Ready",
-								"status": "False",
+								"type":    "Ready",
+								"status":  "False",
+								"message": "LoadBalancer not ready",
+								"reason":  "LoadBalancerNotReady",
 							},
 						},
 					},
@@ -64,6 +70,8 @@ func TestGetGatewayProviderStatus(t *testing.T) {
 				IngressClassName: "nginx",
 				InternalEndpoint: "http://ingress-nginx-controller.ingress-nginx.svc.cluster.local",
 				Ready:            false,
+				Message:          "LoadBalancer not ready",
+				Reason:           "LoadBalancerNotReady",
 			},
 			wantErr: false,
 		},
@@ -121,6 +129,12 @@ func TestGetGatewayProviderStatus(t *testing.T) {
 			}
 			if got.Ready != tt.want.Ready {
 				t.Errorf("GetGatewayProviderStatus().Ready = %v, want %v", got.Ready, tt.want.Ready)
+			}
+			if got.Message != tt.want.Message {
+				t.Errorf("GetGatewayProviderStatus().Message = %v, want %v", got.Message, tt.want.Message)
+			}
+			if got.Reason != tt.want.Reason {
+				t.Errorf("GetGatewayProviderStatus().Reason = %v, want %v", got.Reason, tt.want.Reason)
 			}
 		})
 	}
