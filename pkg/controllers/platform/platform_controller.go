@@ -521,6 +521,8 @@ func (r *PlatformReconciler) createBootstrapResources(ctx context.Context, platf
 	}
 
 	// Create bootstrap repositories for core components
+	// NOTE: Currently only ArgoCD is created here. Gitea and Nginx are managed by their
+	// respective provider controllers (GiteaProvider and NginxGateway) in v1alpha2 architecture.
 	bootstrapApps := []string{v1alpha1.ArgoCDPackageName}
 
 	for _, appName := range bootstrapApps {
@@ -604,8 +606,9 @@ func (r *PlatformReconciler) createGitRepository(ctx context.Context, platform *
 			secretName = gitProviderStatus.CredentialsSecretRef.Name
 			secretNamespace = gitProviderStatus.CredentialsSecretRef.Namespace
 		} else {
-			// Fallback to Gitea defaults for backward compatibility
-			// This should be removed once all providers properly set CredentialsSecretRef
+			// Fallback to Gitea defaults for backward compatibility with current GiteaProvider
+			// This should be removed once all Git providers properly set CredentialsSecretRef
+			// For now, this is safe because GiteaProvider is the only implemented Git provider
 			logger.V(1).Info("Warning: Git provider credentials secret ref is not set, using Gitea defaults")
 			secretName = util.GiteaAdminSecret
 			secretNamespace = util.GiteaNamespace
@@ -620,6 +623,10 @@ func (r *PlatformReconciler) createGitRepository(ctx context.Context, platform *
 				// NOTE: This uses v1alpha1 provider name, not v1alpha2 provider Kind
 				// v1alpha1.GitRepository expects provider names like "gitea" or "github"
 				// not v1alpha2 provider types like "GiteaProvider"
+				// Currently hardcoded to "gitea" because GiteaProvider is the only implemented
+				// Git provider. When GitHub or other providers are added, this will need to be
+				// derived from the provider Kind or the duck-typed provider status should include
+				// the v1alpha1 provider name.
 				Name:             v1alpha1.GitProviderGitea,
 				GitURL:           gitProviderStatus.Endpoint,
 				InternalGitURL:   gitProviderStatus.InternalEndpoint,
