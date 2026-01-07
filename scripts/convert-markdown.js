@@ -345,7 +345,8 @@ const main = () => {
     convertDirectory(inputDir, outputDir, title);
   });
   
-  // Convert root-level documentation files
+  // Convert root-level documentation files (e.g., architecture.md, why-idpbuilder.md)
+  // These are files directly in docs/ directory, not in subdirectories
   console.log('Converting root-level documentation files...');
   convertDirectory(docsSource, outputDocs, 'Documentation');
   

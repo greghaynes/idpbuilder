@@ -106,11 +106,14 @@ if [ -d "$DOCS_SOURCE_DIR" ]; then
     cp -r "$DOCS_SOURCE_DIR/api"/*.md "$OUTPUT_DIR/docs/api/" 2>/dev/null || true
     
     # Copy root-level docs markdown files
+    # Use nullglob pattern to avoid processing literal '*.md' if no files match
+    shopt -s nullglob
     for file in "$DOCS_SOURCE_DIR"/*.md; do
         if [ -f "$file" ]; then
             cp "$file" "$OUTPUT_DIR/docs/" 2>/dev/null || true
         fi
     done
+    shopt -u nullglob
     
     echo "Documentation copied successfully!"
     

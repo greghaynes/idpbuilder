@@ -506,11 +506,11 @@ idpbuilder create
 
 ## Learn More
 
-- [Architecture Documentation](./architecture.md) - Technical deep-dive
-- [Getting Started Guide](../README.md) - Detailed installation and usage
-- [Examples](../examples/README.md) - Example configurations
-- [API Reference](./api/reference.md) - Complete API documentation
-- [Contributing Guide](../CONTRIBUTING.md) - How to contribute
+- [Architecture Documentation](/docs/architecture.html) - Technical deep-dive
+- [Getting Started Guide](/README.html) - Detailed installation and usage
+- [Examples](/docs/examples/README.html) - Example configurations
+- [API Reference](/docs/api/reference.html) - Complete API documentation
+- [Contributing Guide](/CONTRIBUTING.html) - How to contribute
 
 ---
 

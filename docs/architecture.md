@@ -611,10 +611,10 @@ The pluggable architecture via duck-typed CRDs is the key innovation that enable
 
 ## References
 
-- [Controller Architecture Specification](./specs/controller-architecture-spec.md) - Detailed v2 architecture spec
-- [Pluggable Packages Proposal](./specs/pluggable-packages.md) - Package management design
-- [Platform API Reference](./api/reference.md) - Complete API documentation
-- [Examples](../examples/README.md) - Example configurations
+- [Controller Architecture Specification](/docs/specs/controller-architecture-spec.html) - Detailed v2 architecture spec
+- [Pluggable Packages Proposal](/docs/specs/pluggable-packages.html) - Package management design
+- [Platform API Reference](/docs/api/reference.html) - Complete API documentation
+- [Examples](/docs/examples/README.html) - Example configurations
 
 ## Appendix: Complete Example
 
