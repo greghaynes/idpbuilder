@@ -4,37 +4,6 @@ This directory contains implementation details, developer documentation, and tes
 
 ## Documents
 
-### [Phased Implementation Plan](./phased-implementation-plan.md)
-
-**NEW** - Comprehensive phased implementation plan for controller-based architecture migration.
-
-**Quick Reference:**
-- Analysis of implemented vs. remaining features
-- 6 implementation phases with clear objectives
-- Independent testing strategy for each phase
-- Timeline and resource estimates
-- Risk management and rollback plans
-- Success criteria and metrics
-
-**Key Phases:**
-1. **Phase 1**: Owner Reference Pattern (Foundation) - 1 week
-2. **Phase 2**: Bootstrap Repository Creation - 1 week
-3. **Phase 3**: Complete CLI Integration - 3-5 days
-4. **Phase 4**: Platform GitOps Aggregation - 2-3 days
-5. **Phase 5**: Custom Package Migration - 1 week
-6. **Phase 6**: Localbuild Removal - 1 week
-
-**Use Cases:**
-- Planning implementation work
-- Understanding what's done vs. what remains
-- Tracking progress through migration
-- Estimating timelines and resources
-- Validating each phase independently
-
-**See also:**
-- [Next Steps Remove Localbuild](./next-steps-remove-localbuild.md) - Detailed task list
-- [Architecture Transition Guide](./architecture-transition.md) - Visual overview
-
 ### [Resource Creation Sequencing and State Transitions](./resource-creation-sequencing.md)
 
 **NEW** - Comprehensive implementation guide for resource creation sequencing and state transitions.
@@ -68,6 +37,37 @@ This directory contains implementation details, developer documentation, and tes
 **See also:**
 - [Controller Architecture Spec](../specs/controller-architecture-spec.md) - High-level design
 - [Architecture Transition Guide](./architecture-transition.md) - Migration overview
+
+### [Phased Implementation Plan](./phased-implementation-plan.md)
+
+**NEW** - Comprehensive phased implementation plan for controller-based architecture migration.
+
+**Quick Reference:**
+- Analysis of implemented vs. remaining features
+- 6 implementation phases with clear objectives
+- Independent testing strategy for each phase
+- Timeline and resource estimates
+- Risk management and rollback plans
+- Success criteria and metrics
+
+**Key Phases:**
+1. **Phase 1**: Owner Reference Pattern (Foundation) - 1 week
+2. **Phase 2**: Bootstrap Repository Creation - 1 week
+3. **Phase 3**: Complete CLI Integration - 3-5 days
+4. **Phase 4**: Platform GitOps Aggregation - 2-3 days
+5. **Phase 5**: Custom Package Migration - 1 week
+6. **Phase 6**: Localbuild Removal - 1 week
+
+**Use Cases:**
+- Planning implementation work
+- Understanding what's done vs. what remains
+- Tracking progress through migration
+- Estimating timelines and resources
+- Validating each phase independently
+
+**See also:**
+- [Next Steps Remove Localbuild](./next-steps-remove-localbuild.md) - Detailed task list
+- [Architecture Transition Guide](./architecture-transition.md) - Visual overview
 
 ### [Next Steps to Remove Localbuild Controller](./next-steps-remove-localbuild.md)
 
