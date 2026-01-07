@@ -2,7 +2,57 @@
 
 This directory contains implementation details, developer documentation, and testing information for IDP Builder.
 
+## Quick Links
+
+- 🎯 **[Implementation Status](./IMPLEMENTATION_STATUS.md)** - Current status of all specifications
+- 📋 **[Phased Implementation Plan](./phased-implementation-plan.md)** - Complete roadmap for remaining work
+- 🏗️ **[Architecture Transition](./architecture-transition.md)** - Visual guide to v1alpha1 → v1alpha2 migration
+- 🔧 **[Next Steps (Remove Localbuild)](./next-steps-remove-localbuild.md)** - Detailed steps to complete Phase 1
+
 ## Documents
+
+### [Implementation Status](./IMPLEMENTATION_STATUS.md)
+
+**OVERVIEW** - Quick reference to implementation status and roadmap.
+
+**Contains:**
+- Status of all three technical specifications
+- Current architecture (v1alpha1 vs v1alpha2)
+- Implementation roadmap summary
+- Key documents index
+- Quick start for contributors
+
+**Use Cases:**
+- Understanding where the project is today
+- Finding relevant documentation quickly
+- Getting oriented as a new contributor
+
+### [Phased Implementation Plan](./phased-implementation-plan.md)
+
+**PRIMARY ROADMAP** - Comprehensive plan to complete all technical specifications.
+
+**Contains:**
+- Analysis of all three specifications (Pluggable Packages, Controller Architecture, Hyperscaler Providers)
+- 10 detailed phases with testable milestones
+- Dependencies, success criteria, and effort estimates
+- Testing strategy and risk mitigation
+- Total timeline: 24-36 weeks
+
+**Key Phases:**
+1. Complete Controller Architecture Foundation (3-4 weeks) ⚠️ **CRITICAL**
+2. GitHub & GitLab Providers (2-4 weeks)
+3. Envoy & Istio Gateway Providers (2-4 weeks)
+4. Flux Provider (2-3 weeks)
+5. AWS Hyperscaler Providers (3-4 weeks)
+6. Azure Hyperscaler Providers (3-4 weeks)
+7. GCP Hyperscaler Providers (3-4 weeks)
+8. Production Features (4-6 weeks)
+
+**Use Cases:**
+- Understanding the complete project roadmap
+- Planning sprints and milestones
+- Identifying work that can be parallelized
+- Estimating project completion
 
 ### [Resource Creation Sequencing and State Transitions](./resource-creation-sequencing.md)
 
