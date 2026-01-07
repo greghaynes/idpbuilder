@@ -48,8 +48,8 @@ jobs:
             const environment = '${{ steps.cloudflare-deploy.outputs.environment }}';
             const commitSha = context.sha.substring(0, 7);
             
-            // Validate that we have a deployment URL
-            if (!deploymentUrl || deploymentUrl === '') {
+            // Validate that we have a deployment URL and it's not the unresolved expression
+            if (!deploymentUrl || deploymentUrl === '' || deploymentUrl.includes('steps.cloudflare-deploy.outputs')) {
               core.setFailed('Deployment URL is not available from Cloudflare Pages action');
               return;
             }
