@@ -36,6 +36,7 @@ const createHtmlPage = (title, content, breadcrumbPath = '') => `<!DOCTYPE html>
         .markdown-content table th { background-color: var(--bg-alt); }
         .markdown-content blockquote { border-left: 4px solid var(--primary-color); padding-left: 1rem; margin: 1rem 0; color: var(--text-muted); }
     </style>
+    <script src="/js/theme.js"></script>
 </head>
 <body>
     <header>
@@ -56,6 +57,11 @@ const createHtmlPage = (title, content, breadcrumbPath = '') => `<!DOCTYPE html>
             <div class="markdown-content">${content}</div>
         </div>
     </main>
+    <!-- Theme Toggle Button -->
+    <button class="theme-toggle" aria-label="Toggle dark mode">
+        <span class="icon light-icon">☀️</span>
+        <span class="icon dark-icon">🌙</span>
+    </button>
     <footer>
         <div class="container">
             <p>&copy; 2024 CNOE IDP Builder. Licensed under <a href="https://github.com/cnoe-io/idpbuilder/blob/main/LICENSE" target="_blank" rel="noopener">Apache License 2.0</a></p>

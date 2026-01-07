@@ -202,6 +202,7 @@ const createHtmlPage = (title, content, category, relativePath = '') => {
             border-radius: 5px;
         }
     </style>
+    <script src="${relativePath}../../js/theme.js"></script>
 </head>
 <body>
     <header>
@@ -231,6 +232,12 @@ const createHtmlPage = (title, content, category, relativePath = '') => {
             </article>
         </div>
     </main>
+
+    <!-- Theme Toggle Button -->
+    <button class="theme-toggle" aria-label="Toggle dark mode">
+        <span class="icon light-icon">☀️</span>
+        <span class="icon dark-icon">🌙</span>
+    </button>
 
     <footer>
         <div class="container">
