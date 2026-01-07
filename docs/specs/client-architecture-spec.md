@@ -99,7 +99,9 @@ A critical aspect of the architecture is how controllers for provider resources 
 
 **ArgoCD-Driven Dependency Installation:**
 
-Flavors explicitly declare their dependencies (Helm charts or Kustomize packages) that provide the necessary controllers and CRDs. The Flavor Manager creates ArgoCD Applications for these dependencies and waits for them to become healthy before proceeding.
+Flavors explicitly declare their dependencies (Helm charts or Kustomize packages) that provide additional controllers and CRDs beyond the core IDP Builder controllers. The Flavor Manager creates ArgoCD Applications for these dependencies and waits for them to become healthy before proceeding.
+
+**Important**: The core `idpbuilder-controllers` (including Flavor CRD, Platform CRD, and provider CRDs) are installed by the Infrastructure Manager during cluster provisioning, NOT as flavor dependencies. This avoids a circular dependency where flavors would need to declare the controller that defines the Flavor CRD itself.
 
 **Flavor Dependency Declaration:**
 
@@ -109,23 +111,16 @@ kind: Flavor
 metadata:
   name: basic-dev
 spec:
-  # Dependencies installed via ArgoCD
+  # Dependencies installed via ArgoCD (additional controllers beyond core idpbuilder-controllers)
+  # Core idpbuilder-controllers are already installed by Infrastructure Manager
   dependencies:
-    - name: idpbuilder-controllers
-      type: helm
-      source:
-        repoURL: https://cnoe-io.github.io/idpbuilder
-        chart: idpbuilder-controllers
-        targetRevision: "0.5.0"
-      syncWave: 1  # Install first
-      
     - name: nginx-ingress
       type: helm
       source:
         repoURL: https://kubernetes.github.io/ingress-nginx
         chart: ingress-nginx
         targetRevision: "4.8.0"
-      syncWave: 2  # Install after controllers
+      syncWave: 1  # Install first
       condition: gateway.enabled  # Optional
       
     - name: custom-operators
@@ -134,7 +129,7 @@ spec:
         repoURL: https://github.com/example/operators
         path: deploy/overlays/production
         targetRevision: main
-      syncWave: 2
+      syncWave: 1
 ```
 
 **Flavor Manager ArgoCD Application Creation:**
@@ -246,9 +241,11 @@ func (m *Manager) WaitForDependencies(ctx context.Context, flavor *Flavor, timeo
 
 **Installation Sequence:**
 
-1. **Infrastructure Manager** provisions cluster and installs ArgoCD (ArgoCD is a core prerequisite)
-2. **Flavor Manager** creates ArgoCD Applications for each dependency in sync-wave order
-3. **ArgoCD** installs dependencies (controllers, CRDs) and reports health status
+1. **Infrastructure Manager** provisions cluster and installs:
+   - ArgoCD (required for flavor dependency management)
+   - `idpbuilder-controllers` (Flavor CRD, Platform CRD, provider CRDs like GiteaProvider/NginxGateway, and their controllers)
+2. **Flavor Manager** can now read Flavor CRs and create ArgoCD Applications for additional dependencies in sync-wave order
+3. **ArgoCD** installs additional dependencies (e.g., nginx-ingress controller) and reports health status
 4. **Flavor Manager** waits for all dependency Applications to become Healthy
 5. **Flavor Manager** creates provider CRs (components) as additional ArgoCD Applications with higher sync-wave
 6. **ArgoCD** installs components after dependencies are ready
@@ -276,10 +273,12 @@ This ensures controllers are always installed and healthy before the CRs that de
 - Create local Kubernetes clusters (kind, k3s, etc.)
 - Connect to existing/remote Kubernetes clusters
 - Install ArgoCD as core dependency (required for flavor dependency management)
-- Install IDP Builder CRDs and controllers
+- Install `idpbuilder-controllers` (Flavor CRD, Platform CRD, provider CRDs, and controllers)
 - Configure networking (CoreDNS, ingress)
 - Set up TLS certificates
 - Manage cluster lifecycle
+
+**Key Architectural Note**: The Infrastructure Manager installs core `idpbuilder-controllers` to avoid circular dependency. Flavors need the Flavor CRD to be defined, and provider CRs (GiteaProvider, NginxGateway, etc.) need their CRDs installed before flavor processing begins. This makes these controllers a platform-level concern, not a flavor dependency.
 
 **Interfaces**:
 ```go
@@ -323,17 +322,19 @@ infraMgr := infrastructure.NewManager(
 // Provision infrastructure with ArgoCD and IDP Builder controllers
 result, err := infraMgr.Provision(ctx, infrastructure.Config{
     KubernetesVersion: "1.28.0",
-    InstallArgoCD: true,        // Install ArgoCD (required for flavor dependencies)
-    InstallControllers: true,    // Install IDP Builder CRDs and controllers
-    ControllerVersion: "v0.5.0",
+    InstallArgoCD: true,                     // Install ArgoCD (required for flavor dependencies)
+    InstallIDPBuilderControllers: true,      // Install core idpbuilder-controllers
+    IDPBuilderControllersVersion: "v0.5.0", // Includes Flavor, Platform, provider CRDs+controllers
     Networking: infrastructure.NetworkConfig{
         ServiceCIDR: "10.96.0.0/16",
         PodCIDR:     "10.244.0.0/16",
     },
 })
 
-// ArgoCD and IDP Builder controllers are now installed and ready
-// Ready to install flavors with dependencies
+// ArgoCD and IDP Builder core controllers are now installed and ready
+// Flavor CRD exists, so flavors can now be processed
+// Provider CRDs exist, so flavor components can create provider CRs
+// Ready to install flavors with additional dependencies
 ```
 
 #### 2. Flavor Manager
@@ -359,40 +360,34 @@ metadata:
   description: Basic development environment with Gitea, Nginx, and ArgoCD
 spec:
   # Dependencies to install via ArgoCD before components
-  # These provide the CRDs and controllers needed by components
+  # Note: Core idpbuilder-controllers already installed by Infrastructure Manager
+  # These are additional controllers needed by this flavor
   dependencies:
-    - name: idpbuilder-controllers
-      type: helm
-      source:
-        repoURL: https://cnoe-io.github.io/idpbuilder
-        chart: idpbuilder-controllers
-        targetRevision: "0.5.0"
-      syncWave: 1  # Install first
-      
     - name: nginx-ingress
       type: helm
       source:
         repoURL: https://kubernetes.github.io/ingress-nginx
         chart: ingress-nginx
         targetRevision: "4.8.0"
-      syncWave: 2  # Install after controllers
+      syncWave: 1  # Install first
       condition: gateway.enabled  # Optional dependency
       
   # Components to install (creates CRs after dependencies are ready)
+  # CRDs for these (GiteaProvider, NginxGateway, ArgoCDProvider) already exist from core controllers
   components:
     gitProvider:
       kind: GiteaProvider
       version: "1.21.0"
       config:
         adminAutoGenerate: true
-      syncWave: 3  # Install after dependencies
+      syncWave: 2  # Install after dependencies
         
     gateway:
       kind: NginxGateway
       version: "1.13.0"
       config:
         ingressClass: nginx
-      syncWave: 3
+      syncWave: 2
         
     gitOpsProvider:
       kind: ArgoCDProvider
@@ -400,15 +395,16 @@ spec:
       config:
         adminAutoGenerate: true
         ssoEnabled: false
-      syncWave: 3
+      syncWave: 2
         
   # Platform configuration
+  # Platform CRD already exists from core controllers
   platform:
     domain: "cnoe.localtest.me"
     tls:
       enabled: true
       selfSigned: true
-    syncWave: 4  # Install after components
+    syncWave: 3  # Install after components
       
   # Custom packages to include
   customPackages:
@@ -418,7 +414,7 @@ spec:
         repoURL: https://github.com/cnoe-io/backstage-app
         path: deploy/kubernetes
         targetRevision: main
-      syncWave: 5
+      syncWave: 4
       
     - name: crossplane
       type: helm
@@ -426,7 +422,7 @@ spec:
         repoURL: https://charts.crossplane.io/stable
         chart: crossplane
         targetRevision: "1.14.0"
-      syncWave: 5
+      syncWave: 4
 ```
 
 **Interfaces**:
@@ -568,13 +564,10 @@ version: 1.0.0
 appVersion: "1.0"
 
 dependencies:
-  # Controllers needed for providers
-  - name: idpbuilder-controllers
-    version: "0.5.0"
-    repository: "https://cnoe-io.github.io/idpbuilder"
-    condition: controllers.install
-    
-  # Optional: Pre-install provider-specific controllers
+  # Note: Core idpbuilder-controllers already installed by Infrastructure Manager
+  # Only declare additional controllers needed by this flavor
+  
+  # Optional: Pre-install provider-specific controllers if needed
   - name: gitea-operator
     version: "1.21.0"
     repository: "https://dl.gitea.io/charts"
@@ -613,9 +606,9 @@ kind: Kustomization
 
 namespace: idpbuilder-system
 
-# Install controllers first (via Helm or manifests)
+# Note: Core idpbuilder-controllers already installed by Infrastructure Manager
+# Only include additional resources needed by this flavor
 resources:
-  - https://github.com/cnoe-io/idpbuilder/releases/latest/download/controllers.yaml
   - ../../base
   - gitea-provider.yaml
   - nginx-gateway.yaml
@@ -708,32 +701,31 @@ spec:
 
 Flavors declare controller dependencies that must be installed before provider CRs can be reconciled.
 
+**Important Note**: Core `idpbuilder-controllers` are installed by the Infrastructure Manager during cluster provisioning. Flavors only declare **additional** controller dependencies beyond the core controllers.
+
 **Dependency Declaration in Helm**
 
 ```yaml
 # Chart.yaml
 dependencies:
-  # Core IDP Builder controllers (always required)
-  - name: idpbuilder-controllers
-    version: "^0.5.0"
-    repository: "https://cnoe-io.github.io/idpbuilder"
-    
-  # Provider-specific controllers (conditional)
+  # Note: Core idpbuilder-controllers already installed by Infrastructure Manager
+  # Only declare additional provider-specific controllers
+  
   - name: nginx-ingress-controller
     version: "4.8.0"
     repository: "https://kubernetes.github.io/ingress-nginx"
     condition: gateway.kind=NginxGateway
     
-  - name: argocd
-    version: "5.51.0"
-    repository: "https://argoproj.github.io/argo-helm"
-    condition: gitOpsProvider.kind=ArgoCDProvider
+  - name: external-secrets
+    version: "0.9.0"
+    repository: "https://charts.external-secrets.io"
+    condition: secrets.provider=ExternalSecrets
 ```
 
 **Installation Sequence with Helm Hooks**
 
 ```yaml
-# templates/00-controllers.yaml
+# templates/00-namespace.yaml
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -743,21 +735,8 @@ metadata:
     "helm.sh/hook-weight": "-10"
 
 ---
-# Install controllers before any CRs
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: controller-installer
-  annotations:
-    "helm.sh/hook": pre-install
-    "helm.sh/hook-weight": "-5"
-    "helm.sh/hook-delete-policy": before-hook-creation
-data:
-  install.sh: |
-    #!/bin/bash
-    # Install idpbuilder controllers
-    kubectl apply -f https://github.com/cnoe-io/idpbuilder/releases/latest/download/controllers.yaml
-    kubectl wait --for=condition=ready pod -l app=idpbuilder-controller -n idpbuilder-system --timeout=300s
+# Note: Core idpbuilder-controllers already installed by Infrastructure Manager
+# Additional controller installation hooks can be added here if needed
 ```
 
 **Installation Sequence with Kustomize**
@@ -767,16 +746,16 @@ data:
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
+# Note: Core idpbuilder-controllers already installed by Infrastructure Manager
+# Only include additional resources
+
 resources:
-  # Phase 1: Controllers (with sync-wave annotations)
-  - controllers/idpbuilder-controllers.yaml
-  
-  # Phase 2: Provider CRs (depend on controllers)
+  # Provider CRs (CRDs already exist from core controllers)
   - providers/gitea-provider.yaml
   - providers/nginx-gateway.yaml
   - providers/argocd-provider.yaml
   
-  # Phase 3: Platform CR (depends on providers)
+  # Platform CR (CRD already exists from core controllers)
   - platform/platform.yaml
 
 # ArgoCD sync waves for ordering
@@ -939,11 +918,10 @@ spec:
     idpbuilderVersion: ">=0.5.0,<0.7.0"
     kubernetesVersion: ">=1.26.0"
     
+  # Note: Core idpbuilder-controllers are platform requirement, not flavor dependency
+  # Only list additional controllers specific to this flavor
   dependencies:
     controllers:
-      - name: idpbuilder-controllers
-        version: "0.5.0"
-        required: true
       - name: nginx-ingress-controller
         version: "4.8.0"
         required: false
@@ -1655,38 +1633,32 @@ metadata:
     complexity: basic
     type: built-in
 spec:
-  # Dependencies installed via ArgoCD
+  # Note: Core idpbuilder-controllers already installed by Infrastructure Manager
+  # Only additional dependencies needed for this flavor
   dependencies:
-    - name: idpbuilder-controllers
-      type: helm
-      source:
-        repoURL: https://cnoe-io.github.io/idpbuilder
-        chart: idpbuilder-controllers
-        targetRevision: "0.5.0"
-      syncWave: 1
-      
     - name: nginx-ingress
       type: helm
       source:
         repoURL: https://kubernetes.github.io/ingress-nginx
         chart: ingress-nginx
         targetRevision: "4.8.0"
-      syncWave: 2
+      syncWave: 1
       
+  # CRDs for these components already exist from core controllers
   components:
     gitProvider:
       kind: GiteaProvider
       version: "1.21.0"
       config:
         adminAutoGenerate: true
-      syncWave: 3
+      syncWave: 2
         
     gateway:
       kind: NginxGateway
       version: "1.13.0"
       config:
         ingressClass: nginx
-      syncWave: 3
+      syncWave: 2
         
     gitOpsProvider:
       kind: ArgoCDProvider
@@ -1694,14 +1666,14 @@ spec:
       config:
         adminAutoGenerate: true
         ssoEnabled: false
-      syncWave: 3
+      syncWave: 2
         
   platform:
     domain: "cnoe.localtest.me"
     tls:
       enabled: true
       selfSigned: true
-    syncWave: 4
+    syncWave: 3
 ```
 
 ### Full Development Flavor (Example)
