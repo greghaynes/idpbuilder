@@ -4,82 +4,22 @@ This directory contains implementation details, developer documentation, and tes
 
 ## Documents
 
-### [Next Steps to Remove Localbuild Controller](./next-steps-remove-localbuild.md)
+### [Implementation Roadmap](./implementation-roadmap.md)
 
-**NEW** - Comprehensive guide for completing the migration to the controller-based architecture (v1alpha2).
+**CURRENT** - Up-to-date roadmap for completing the controller-based architecture migration.
 
 **Quick Reference:**
-- 7 priority-ordered steps to remove the Localbuild controller
-- Current state analysis (what's done vs. what's missing)
-- Detailed implementation requirements with code examples
-- Testing strategy and success criteria
-- 4-week timeline estimate
-
-**Key Missing Pieces:**
-1. Owner Reference Pattern (Priority 1 - CRITICAL)
-2. Bootstrap Repository Creation (Priority 2)
-3. CLI Creates All Provider CRs (Priority 3)
-4. Platform Aggregates GitOps Providers
-5. Custom Package Migration
-6. Remove Localbuild CR Creation
-7. Delete Localbuild Controller
-
-**See also:**
-- [Architecture Transition Guide](./architecture-transition.md) - Visual overview with diagrams
-- [Quick Start Implementation](./quick-start-implementation.md) - Step-by-step code changes
-
-### [Architecture Transition Guide](./architecture-transition.md)
-
-**NEW** - Visual guide for the Localbuild → Platform-based architecture migration.
-
-**Contains:**
-- Visual diagrams of current vs. target state
-- Migration checklist with status indicators (✅ 🔲 🚧 ❌)
-- Phase dependencies and critical path analysis
-- Week-by-week implementation timeline
-- Success metrics and validation criteria
-- Rollback plan if issues arise
+- Current implementation status analysis
+- Prioritized list of remaining work
+- Technical implementation details
+- Testing and validation strategy
+- Timeline and milestones
 
 **Use Cases:**
-- Understanding the architectural transition at a glance
-- Tracking migration progress
-- Planning implementation phases
-- Communicating changes to stakeholders
-
-### [Quick Start Implementation Guide](./quick-start-implementation.md)
-
-**NEW** - Practical step-by-step guide for developers implementing the migration.
-
-**Contains:**
-- Exact file locations for each change
-- Copy-paste ready code snippets
-- Testing commands after each step
-- Troubleshooting guide for common issues
-- Testing checklist for validation
-- Command reference for development
-
-**Use Cases:**
-- Implementing the migration steps
-- Quick reference while coding
-- Debugging implementation issues
-- Validating changes at each step
-
-### [Phase 1.2 Final Status](./phase-1-2-final-status.md)
-
-Status report for Phase 1.2 (NginxGateway and Platform controller) implementation.
-
-**Summary:**
-- Phase 1.2 COMPLETE and PRODUCTION READY
-- NginxGateway provider implemented
-- Platform controller with duck-typing
-- All unit tests passing
-- Example CRs and documentation
-
-**What's Working:**
-- GiteaProvider ✅
-- NginxGateway ✅
-- Platform controller (basic aggregation) ✅
-- Duck-typing utilities ✅
+- Understanding what work remains
+- Planning implementation sprints
+- Tracking progress on the migration
+- Identifying dependencies and blockers
 
 ### [Test Duration Summary](./test-duration-summary.md)
 
@@ -153,6 +93,12 @@ python3 scripts/analyze_test_times.py test-output.json docs/implementation/test-
 
 See [scripts/README.md](../../scripts/README.md) for more details on the analysis tool.
 
+## Archived Documentation
+
+Historical implementation documentation from earlier phases of the controller-based architecture migration has been moved to the [archived](./archived/) directory. These documents provide valuable context about the architectural evolution but have been superseded by the current implementation roadmap.
+
+See [archived/README.md](./archived/README.md) for details on archived documents.
+
 ## Purpose
 
 This documentation helps:
@@ -165,7 +111,8 @@ This documentation helps:
 ## Related Documentation
 
 - [Technical Specifications](../specs/) - Architectural design documents, including:
-  - [Resource Creation Sequencing](../specs/resource-creation-sequencing.md) - Moved to specs directory as a technical specification
+  - [Controller Architecture Specification](../specs/controller-architecture-spec.md) - Controller-based architecture design
+  - [Resource Creation Sequencing](../specs/resource-creation-sequencing.md) - State transition specifications
   - [Client Architecture Specification](../specs/client-architecture-spec.md) - New unified client design
 - [User Documentation](../user/) - User-facing guides
 - [Scripts README](../../scripts/README.md) - Development utility scripts
