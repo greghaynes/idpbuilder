@@ -345,6 +345,10 @@ const main = () => {
     convertDirectory(inputDir, outputDir, title);
   });
   
+  // Convert root-level documentation files
+  console.log('Converting root-level documentation files...');
+  convertDirectory(docsSource, outputDocs, 'Documentation');
+  
   console.log('Conversion complete!');
 };
 
