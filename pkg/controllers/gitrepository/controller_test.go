@@ -295,7 +295,7 @@ func TestGitRepositoryContentReconcileEmbedded(t *testing.T) {
 		ObjectMeta: m,
 		Spec: v1alpha1.GitRepositorySpec{
 			Source: v1alpha1.GitRepositorySource{
-				EmbeddedAppName: "argocd", // Changed from "gitea" - gitea no longer embedded
+				EmbeddedAppName: "nginx",
 				Type:            "embedded",
 			},
 			Provider: v1alpha1.Provider{

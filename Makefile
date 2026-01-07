@@ -23,51 +23,26 @@ ENVTEST ?= $(LOCALBIN)/setup-envtest
 KUSTOMIZE ?= $(LOCALBIN)/kustomize
 HELM_TGZ ?= $(LOCALBIN)/helm.tar.gz
 HELM ?= $(LOCALBIN)/helm
-CRD_REF_DOCS ?= $(LOCALBIN)/crd-ref-docs
 
 ## Tool Versions
-CONTROLLER_TOOLS_VERSION ?= v0.20.0
-KUSTOMIZE_VERSION ?= v5.5.0
-CRD_REF_DOCS_VERSION ?= v0.1.0
+CONTROLLER_TOOLS_VERSION ?= v0.15.0
 
 .PHONY: fmt
 fmt: ## Run go fmt against code.
 	go fmt ./...
-
-.PHONY: fmt-check
-fmt-check: ## Check if code is formatted. Fails if formatting is needed.
-	@output=$$(go fmt ./...); \
-	if [ -n "$$output" ]; then \
-		echo "The following files are not formatted:"; \
-		echo "$$output"; \
-		echo "Please run 'make fmt' or 'go fmt ./...' to format your code"; \
-		exit 1; \
-	fi
 
 .PHONY: vet
 vet: ## Run go vet against code.
 	go vet ./...
 
 .PHONY: test
-test: manifests generate fmt vet ## Run tests.
+test: manifests generate fmt vet envtest ## Run tests.
 ifeq ($(RUN),)
-	go test ./... -coverprofile cover.out
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test -p 1 --tags=integration ./... -coverprofile cover.out
 else
-	go test ./... -coverprofile cover.out -run $(RUN)
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test -p 1 --tags=integration ./... -coverprofile cover.out -run $(RUN)
 endif
 
-.PHONY: test-timing
-test-timing: manifests generate fmt vet ## Run tests and generate timing analysis report.
-	@echo "Running tests with JSON output..."
-	go test -v -timeout 30m ./... -json 2>&1 | tee test-output.json
-	@echo "Generating test timing analysis..."
-	python3 scripts/analyze_test_times.py test-output.json docs/implementation/test-timing-analysis.md
-	@echo "Report saved to docs/implementation/test-timing-analysis.md"
-	@rm -f test-output.json
-
-.PHONY: validate-docs
-validate-docs: ## Validate that all docs are linked in site navigation.
-	@python3 scripts/validate-docs-sync.py
 	
 
 .PHONY: generate
@@ -85,10 +60,10 @@ $(CONTROLLER_GEN): $(LOCALBIN)
 	GOBIN=$(LOCALBIN) go install sigs.k8s.io/controller-tools/cmd/controller-gen@$(CONTROLLER_TOOLS_VERSION)
 
 .PHONY: kustomize
-kustomize: $(KUSTOMIZE) ## Download kustomize locally if necessary
-$(KUSTOMIZE): $(LOCALBIN)
-	test -s $(LOCALBIN)/kustomize || \
-	GOBIN=$(LOCALBIN) go install sigs.k8s.io/kustomize/kustomize/v5@$(KUSTOMIZE_VERSION)
+kustomize: ## Download kustomize if necessary
+ifeq (,$(wildcard $(KUSTOMIZE)))
+	cd $(LOCALBIN) && curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh"  | bash
+endif
 
 helm_os := $(shell uname | tr '[:upper:]' '[:lower:]')
 helm_version ?= 3.15.0
@@ -104,37 +79,17 @@ endif
 
 
 .PHONY: helm
-helm: ## Download helm if necessary or use system helm
+helm: ## Download helm if necessary
 ifeq (,$(wildcard $(HELM)))
-	@if command -v helm >/dev/null 2>&1; then \
-		echo "Using system helm"; \
-		ln -sf $$(command -v helm) $(HELM); \
-	else \
-		echo "Downloading helm v$(helm_version)"; \
-		curl https://get.helm.sh/helm-v$(helm_version)-$(helm_os)-$(helm_arch).tar.gz -o $(HELM_TGZ); \
-		tar xvzf $(HELM_TGZ) -C $(LOCALBIN) --strip-components 1 $(helm_os)-$(helm_arch)/helm; \
-		chmod +x $(HELM); \
-	fi
+	curl https://get.helm.sh/helm-v$(helm_version)-$(helm_os)-$(helm_arch).tar.gz -o $(HELM_TGZ)
+	tar xvzf $(HELM_TGZ) -C $(LOCALBIN) --strip-components 1 $(helm_os)-$(helm_arch)/helm
+	chmod +x $(HELM)
 endif
 
 .PHONY: envtest
 envtest: $(ENVTEST) ## Download envtest-setup locally if necessary.
 $(ENVTEST): $(LOCALBIN)
 	test -s $(LOCALBIN)/setup-envtest || GOBIN=$(LOCALBIN) go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
-
-.PHONY: crd-ref-docs
-crd-ref-docs: $(CRD_REF_DOCS) ## Download crd-ref-docs locally if necessary.
-$(CRD_REF_DOCS): $(LOCALBIN)
-	test -s $(LOCALBIN)/crd-ref-docs || GOBIN=$(LOCALBIN) go install github.com/elastic/crd-ref-docs@$(CRD_REF_DOCS_VERSION)
-
-.PHONY: api-docs
-api-docs: crd-ref-docs ## Generate API reference documentation from CRDs.
-	@mkdir -p ./docs/api
-	$(CRD_REF_DOCS) \
-		--source-path=./api \
-		--config=./hack/api-docs-config.yaml \
-		--renderer=markdown \
-		--output-path=./docs/api/reference.md
 
 .PHONY: embedded-resources
 embedded-resources: kustomize helm

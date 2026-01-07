@@ -23,12 +23,12 @@ func (l *kindLogger) Warnf(message string, args ...interface{}) {
 }
 
 func (l *kindLogger) Error(message string) {
-	l.cliLogger.Error(fmt.Errorf("%s", message), "")
+	l.cliLogger.Error(fmt.Errorf(message), "")
 }
 
 func (l *kindLogger) Errorf(message string, args ...interface{}) {
 	msg := fmt.Sprintf(message, args...)
-	l.cliLogger.Error(fmt.Errorf("%s", msg), "")
+	l.cliLogger.Error(fmt.Errorf(msg), "")
 }
 
 func (l *kindLogger) V(level kindlog.Level) kindlog.InfoLogger {

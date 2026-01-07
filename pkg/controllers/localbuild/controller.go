@@ -5,7 +5,6 @@ import (
 	"code.gitea.io/sdk/gitea"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"k8s.io/apimachinery/pkg/types"
@@ -19,11 +18,9 @@ import (
 	argocdapp "github.com/cnoe-io/argocd-api/api/argo/application"
 	argov1alpha1 "github.com/cnoe-io/argocd-api/api/argo/application/v1alpha1"
 	"github.com/cnoe-io/idpbuilder/api/v1alpha1"
-	"github.com/cnoe-io/idpbuilder/api/v1alpha2"
 	"github.com/cnoe-io/idpbuilder/globals"
 	"github.com/cnoe-io/idpbuilder/pkg/resources/localbuild"
 	"github.com/cnoe-io/idpbuilder/pkg/util"
-	"github.com/cnoe-io/idpbuilder/pkg/util/provider"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -48,17 +45,6 @@ const (
 	argoCDApplicationAnnotationValueRefreshNormal = "normal"
 	argoCDApplicationSetAnnotationKeyRefresh      = "argocd.argoproj.io/application-set-refresh"
 	argoCDApplicationSetAnnotationKeyRefreshTrue  = "true"
-
-	// Provider installation tracking constants
-	statusPollInterval = time.Second * 5
-	installTimeout     = time.Minute * 5
-)
-
-var (
-	// errGiteaProviderNotReady is returned when the GiteaProvider is not yet ready
-	errGiteaProviderNotReady = errors.New("GiteaProvider is not ready yet")
-	// errInstallTimeout is returned when a provider installation times out
-	errInstallTimeout = errors.New("Provider installation timed out")
 )
 
 type ArgocdSession struct {
@@ -74,13 +60,6 @@ type LocalbuildReconciler struct {
 	Config         v1alpha1.BuildCustomizationSpec
 	TempDir        string
 	RepoMap        *util.RepoMap
-	StatusReporter interface {
-		AddSubStep(parentName, subStepName, description string)
-		UpdateSubStep(parentName, subStepName string, state int)
-		UpdateSubStepWithPhase(parentName, subStepName string, state int, phase string)
-	}
-	subStepsInitialized bool
-	mu                  sync.Mutex
 }
 
 type subReconciler func(ctx context.Context, req ctrl.Request, resource *v1alpha1.Localbuild) (ctrl.Result, error)
@@ -105,15 +84,6 @@ func (r *LocalbuildReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, err
 	}
 
-	// NOTE: GiteaProvider creation removed - now handled by v2 architecture in build.go
-	// The GiteaProvider CR is created by the CLI in build.go and managed by GiteaProviderReconciler
-
-	// Create NginxGateway CR early in reconciliation
-	if err := r.ensureNginxGatewayExists(ctx, &localBuild); err != nil {
-		logger.Error(err, "Failed to ensure NginxGateway exists")
-		return ctrl.Result{RequeueAfter: errRequeueTime}, nil
-	}
-
 	instCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	errChan := make(chan error, 3)
@@ -125,7 +95,7 @@ func (r *LocalbuildReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, nil
 	case instErr := <-errChan:
 		if instErr != nil {
-			// Failed installing core package. Debug log and try again.
+			// likely due to ingress-nginx admission hook not ready. debug log and try again.
 			logger.V(1).Info("failed installing core package. likely not fatal. will try again", "error", instErr)
 			return ctrl.Result{RequeueAfter: errRequeueTime}, nil
 		}
@@ -154,17 +124,28 @@ func (r *LocalbuildReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			}
 		}
 
-		// NOTE: Gitea password management removed - now handled by GiteaProvider controller
+		// Check if the Gitea credentials secret exists
+		giteaAdminPassword, err := r.extractGiteaAdminSecret(ctx)
+		if err != nil {
+			// Gitea admin secret is not yet available ...
+			return ctrl.Result{RequeueAfter: defaultRequeueTime}, nil
+		}
+		logger.V(1).Info("Gitea admin secret found ...")
+		// Secret containing the gitea password exists
+		// Lets try to update the password
+		if giteaAdminPassword != "" && giteaAdminPassword != util.StaticPassword {
+			err = r.updateGiteaPassword(ctx, giteaAdminPassword)
+			if err != nil {
+				return ctrl.Result{}, err
+			} else {
+				logger.V(1).Info(fmt.Sprintf("Gitea admin password change succeeded !"))
+			}
+		}
 	}
 
 	logger.V(1).Info("done installing core packages. passing control to argocd")
 	_, err = r.ReconcileArgoAppsWithGitea(ctx, req, &localBuild)
 	if err != nil {
-		// If GiteaProvider is not ready yet, requeue with a delay instead of returning an error
-		if errors.Is(err, errGiteaProviderNotReady) {
-			logger.V(1).Info("GiteaProvider is not ready yet, requeueing")
-			return ctrl.Result{RequeueAfter: errRequeueTime}, nil
-		}
 		return ctrl.Result{}, err
 	}
 
@@ -177,363 +158,25 @@ func (r *LocalbuildReconciler) installCorePackages(ctx context.Context, req ctrl
 	var wg sync.WaitGroup
 
 	installers := map[string]subReconciler{
-		v1alpha1.ArgoCDPackageName: r.ReconcileArgo,
-		// NOTE: IngressNginx moved to NginxGateway controller (v2)
-		// NOTE: Gitea removed - now managed by GiteaProvider controller
+		v1alpha1.IngressNginxPackageName: r.ReconcileNginx,
+		v1alpha1.ArgoCDPackageName:       r.ReconcileArgo,
+		v1alpha1.GiteaPackageName:        r.ReconcileGitea,
 	}
 	logger.V(1).Info("installing core packages")
-
-	// Add sub-steps for each package only once
-	r.mu.Lock()
-	shouldAddSubSteps := !r.subStepsInitialized
-	if shouldAddSubSteps {
-		r.subStepsInitialized = true
-	}
-	r.mu.Unlock()
-
-	if shouldAddSubSteps && r.StatusReporter != nil {
-		for name := range installers {
-			r.StatusReporter.AddSubStep("packages", name, name)
-		}
-		// Add gitea substep separately since it's managed by GiteaProvider controller
-		r.StatusReporter.AddSubStep("packages", v1alpha1.GiteaPackageName, v1alpha1.GiteaPackageName)
-
-		// Add nginx substep since it's managed by NginxGateway controller
-		r.StatusReporter.AddSubStep("packages", "nginx", "nginx")
-
-		// Also add sub-steps for custom packages
-		for i := range resource.Spec.PackageConfigs.CustomPackageDirs {
-			name := fmt.Sprintf("custom-dir-%d", i)
-			r.StatusReporter.AddSubStep("packages", name, resource.Spec.PackageConfigs.CustomPackageDirs[i])
-		}
-		for i := range resource.Spec.PackageConfigs.CustomPackageFiles {
-			name := fmt.Sprintf("custom-file-%d", i)
-			r.StatusReporter.AddSubStep("packages", name, resource.Spec.PackageConfigs.CustomPackageFiles[i])
-		}
-		for i := range resource.Spec.PackageConfigs.CustomPackageUrls {
-			name := fmt.Sprintf("custom-url-%d", i)
-			r.StatusReporter.AddSubStep("packages", name, resource.Spec.PackageConfigs.CustomPackageUrls[i])
-		}
-	}
-
-	// Track gitea installation in parallel
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		r.trackGiteaInstallation(ctx, resource)
-	}()
-
-	// Track argocd installation in parallel
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		r.trackArgoCDInstallation(ctx, resource)
-	}()
-
-	// Track nginx installation in parallel
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		r.trackNginxInstallation(ctx, resource)
-	}()
-
 	for k, v := range installers {
 		wg.Add(1)
 		name := k
 		inst := v
 		go func() {
 			defer wg.Done()
-
-			// Mark as running
-			if r.StatusReporter != nil {
-				r.StatusReporter.UpdateSubStep("packages", name, 1) // StateRunning = 1
-			}
-
 			_, iErr := inst(ctx, req, resource)
 			if iErr != nil {
 				logger.V(1).Info("failed installing", "name", name, "error", iErr)
-				if r.StatusReporter != nil {
-					r.StatusReporter.UpdateSubStep("packages", name, 3) // StateFailed = 3
-				}
 				errChan <- fmt.Errorf("failed installing %s: %w", name, iErr)
-			} else {
-				// Mark as complete
-				if r.StatusReporter != nil {
-					r.StatusReporter.UpdateSubStep("packages", name, 2) // StateComplete = 2
-				}
 			}
 		}()
 	}
 	wg.Wait()
-}
-
-// isErrorPhase checks if a provider phase indicates an error state
-func isErrorPhase(phase string) bool {
-	return phase == "ConfigurationError" || phase == "Failed"
-}
-
-// trackGiteaInstallation monitors GiteaProvider status and updates the gitea substep
-func (r *LocalbuildReconciler) trackGiteaInstallation(ctx context.Context, resource *v1alpha1.Localbuild) {
-	logger := log.FromContext(ctx)
-
-	// Mark gitea as running
-	if r.StatusReporter != nil {
-		r.StatusReporter.UpdateSubStep("packages", v1alpha1.GiteaPackageName, 1) // StateRunning = 1
-	}
-
-	// Poll for GiteaProvider readiness
-	ticker := time.NewTicker(statusPollInterval)
-	defer ticker.Stop()
-
-	timeout := time.After(installTimeout)
-
-	for {
-		select {
-		case <-ctx.Done():
-			logger.V(1).Info("Context cancelled while tracking gitea installation")
-			return
-		case <-timeout:
-			logger.Error(errInstallTimeout, "Gitea installation timed out")
-			if r.StatusReporter != nil {
-				r.StatusReporter.UpdateSubStep("packages", v1alpha1.GiteaPackageName, 3) // StateFailed = 3
-			}
-			return
-		case <-ticker.C:
-			// Check GiteaProvider status
-			giteaProvider := &v1alpha2.GiteaProvider{}
-			err := r.Get(ctx, client.ObjectKey{
-				Name:      getGiteaProviderName(resource.Name),
-				Namespace: util.GiteaNamespace,
-			}, giteaProvider)
-
-			if err != nil {
-				if k8serrors.IsNotFound(err) {
-					logger.V(1).Info("GiteaProvider not found yet, waiting...")
-					continue
-				}
-				logger.V(1).Info("Error getting GiteaProvider", "error", err)
-				continue
-			}
-
-			// Convert to unstructured for duck-typing
-			unstructuredProvider := &unstructured.Unstructured{}
-			unstructuredProvider.Object, err = runtime.DefaultUnstructuredConverter.ToUnstructured(giteaProvider)
-			if err != nil {
-				logger.V(1).Info("Error converting GiteaProvider to unstructured", "error", err)
-				continue
-			}
-
-			// Get the phase
-			phase, err := provider.GetProviderPhase(unstructuredProvider)
-			if err != nil {
-				logger.V(1).Info("Error getting phase", "error", err)
-				continue
-			}
-
-			// Update the substep with the current phase
-			// Use StateFailed (3) if phase indicates an error, otherwise StateRunning (1)
-			if r.StatusReporter != nil {
-				if isErrorPhase(phase) {
-					r.StatusReporter.UpdateSubStepWithPhase("packages", v1alpha1.GiteaPackageName, 3, phase) // StateFailed = 3
-					return
-				}
-				r.StatusReporter.UpdateSubStepWithPhase("packages", v1alpha1.GiteaPackageName, 1, phase) // StateRunning = 1
-			}
-
-			// Check if provider is ready
-			ready, err := provider.IsGitProviderReady(unstructuredProvider)
-			if err != nil {
-				logger.V(1).Info("Error checking if git provider is ready", "error", err)
-				continue
-			}
-
-			if ready {
-				logger.V(1).Info("Gitea installation complete")
-				if r.StatusReporter != nil {
-					r.StatusReporter.UpdateSubStepWithPhase("packages", v1alpha1.GiteaPackageName, 2, "Ready") // StateComplete = 2
-				}
-				return
-			}
-
-			logger.V(1).Info("Gitea not ready yet, continuing to wait...", "phase", phase)
-		}
-	}
-}
-
-// trackArgoCDInstallation monitors ArgoCDProvider status and updates the argocd substep
-func (r *LocalbuildReconciler) trackArgoCDInstallation(ctx context.Context, resource *v1alpha1.Localbuild) {
-	logger := log.FromContext(ctx)
-
-	// Mark argocd as running
-	if r.StatusReporter != nil {
-		r.StatusReporter.UpdateSubStep("packages", v1alpha1.ArgoCDPackageName, 1) // StateRunning = 1
-	}
-
-	// Poll for ArgoCDProvider readiness
-	ticker := time.NewTicker(statusPollInterval)
-	defer ticker.Stop()
-
-	timeout := time.After(installTimeout)
-
-	for {
-		select {
-		case <-ctx.Done():
-			logger.V(1).Info("Context cancelled while tracking argocd installation")
-			return
-		case <-timeout:
-			logger.V(1).Info("ArgoCD installation timed out")
-			if r.StatusReporter != nil {
-				r.StatusReporter.UpdateSubStep("packages", v1alpha1.ArgoCDPackageName, 3) // StateFailed = 3
-			}
-			return
-		case <-ticker.C:
-			// Check ArgoCDProvider status
-			argocdProvider := &v1alpha2.ArgoCDProvider{}
-			err := r.Get(ctx, client.ObjectKey{
-				Name:      getArgoCDProviderName(resource.Name),
-				Namespace: globals.ArgoCDNamespace,
-			}, argocdProvider)
-
-			if err != nil {
-				if k8serrors.IsNotFound(err) {
-					logger.V(1).Info("ArgoCDProvider not found yet, waiting...")
-					continue
-				}
-				logger.V(1).Info("Error getting ArgoCDProvider", "error", err)
-				continue
-			}
-
-			// Convert to unstructured for duck-typing
-			unstructuredProvider := &unstructured.Unstructured{}
-			unstructuredProvider.Object, err = runtime.DefaultUnstructuredConverter.ToUnstructured(argocdProvider)
-			if err != nil {
-				logger.V(1).Info("Error converting ArgoCDProvider to unstructured", "error", err)
-				continue
-			}
-
-			// Get the phase
-			phase, err := provider.GetProviderPhase(unstructuredProvider)
-			if err != nil {
-				logger.V(1).Info("Error getting phase", "error", err)
-				continue
-			}
-
-			// Update the substep with the current phase
-			// Use StateFailed (3) if phase indicates an error, otherwise StateRunning (1)
-			if r.StatusReporter != nil {
-				if isErrorPhase(phase) {
-					r.StatusReporter.UpdateSubStepWithPhase("packages", v1alpha1.ArgoCDPackageName, 3, phase) // StateFailed = 3
-					return
-				}
-				r.StatusReporter.UpdateSubStepWithPhase("packages", v1alpha1.ArgoCDPackageName, 1, phase) // StateRunning = 1
-			}
-
-			// Check if provider is ready
-			ready, err := provider.IsGitOpsProviderReady(unstructuredProvider)
-			if err != nil {
-				logger.V(1).Info("Error checking if gitops provider is ready", "error", err)
-				continue
-			}
-
-			if ready {
-				logger.V(1).Info("ArgoCD installation complete")
-				if r.StatusReporter != nil {
-					r.StatusReporter.UpdateSubStepWithPhase("packages", v1alpha1.ArgoCDPackageName, 2, "Ready") // StateComplete = 2
-				}
-				return
-			}
-
-			logger.V(1).Info("ArgoCD not ready yet, continuing to wait...", "phase", phase)
-		}
-	}
-}
-
-// trackNginxInstallation monitors NginxGateway status and updates the nginx substep
-func (r *LocalbuildReconciler) trackNginxInstallation(ctx context.Context, resource *v1alpha1.Localbuild) {
-	logger := log.FromContext(ctx)
-
-	// Mark nginx as running
-	if r.StatusReporter != nil {
-		r.StatusReporter.UpdateSubStep("packages", "nginx", 1) // StateRunning = 1
-	}
-
-	// Poll for NginxGateway readiness
-	ticker := time.NewTicker(statusPollInterval)
-	defer ticker.Stop()
-
-	timeout := time.After(installTimeout)
-
-	for {
-		select {
-		case <-ctx.Done():
-			logger.V(1).Info("Context cancelled while tracking nginx installation")
-			return
-		case <-timeout:
-			logger.V(1).Info("Nginx installation timed out")
-			if r.StatusReporter != nil {
-				r.StatusReporter.UpdateSubStep("packages", "nginx", 3) // StateFailed = 3
-			}
-			return
-		case <-ticker.C:
-			// Check NginxGateway status
-			nginxGateway := &v1alpha2.NginxGateway{}
-			err := r.Get(ctx, client.ObjectKey{
-				Name:      nginxGatewayName,
-				Namespace: globals.GetProjectNamespace(resource.Name),
-			}, nginxGateway)
-
-			if err != nil {
-				if k8serrors.IsNotFound(err) {
-					logger.V(1).Info("NginxGateway not found yet, waiting...")
-					continue
-				}
-				logger.V(1).Info("Error getting NginxGateway", "error", err)
-				continue
-			}
-
-			// Convert to unstructured for duck-typing
-			unstructuredProvider := &unstructured.Unstructured{}
-			unstructuredProvider.Object, err = runtime.DefaultUnstructuredConverter.ToUnstructured(nginxGateway)
-			if err != nil {
-				logger.V(1).Info("Error converting NginxGateway to unstructured", "error", err)
-				continue
-			}
-
-			// Get the phase
-			phase, err := provider.GetProviderPhase(unstructuredProvider)
-			if err != nil {
-				logger.V(1).Info("Error getting phase", "error", err)
-				continue
-			}
-
-			// Update the substep with the current phase
-			// Use StateFailed (3) if phase indicates an error, otherwise StateRunning (1)
-			if r.StatusReporter != nil {
-				if isErrorPhase(phase) {
-					r.StatusReporter.UpdateSubStepWithPhase("packages", "nginx", 3, phase) // StateFailed = 3
-					return
-				}
-				r.StatusReporter.UpdateSubStepWithPhase("packages", "nginx", 1, phase) // StateRunning = 1
-			}
-
-			// Check if provider is ready
-			ready, err := provider.IsGatewayProviderReady(unstructuredProvider)
-			if err != nil {
-				logger.V(1).Info("Error checking if gateway provider is ready", "error", err)
-				continue
-			}
-
-			if ready {
-				logger.V(1).Info("Nginx installation complete")
-				if r.StatusReporter != nil {
-					r.StatusReporter.UpdateSubStepWithPhase("packages", "nginx", 2, "Ready") // StateComplete = 2
-				}
-				return
-			}
-
-			logger.V(1).Info("Nginx not ready yet, continuing to wait...", "phase", phase)
-		}
-	}
 }
 
 // Responsible to updating ObservedGeneration in status
@@ -597,10 +240,7 @@ func (r *LocalbuildReconciler) ReconcileArgoAppsWithGitea(ctx context.Context, r
 
 	// push bootstrap app manifests to Gitea. let ArgoCD take over
 	// will need a way to filter them based on user input
-	// NOTE: Gitea removed - now managed by GiteaProvider controller, not as an ArgoCD app
-	// NOTE: IngressNginx removed - now managed by NginxGateway controller (v2)
-	bootStrapApps := []string{v1alpha1.ArgoCDPackageName}
-
+	bootStrapApps := []string{v1alpha1.ArgoCDPackageName, v1alpha1.IngressNginxPackageName, v1alpha1.GiteaPackageName}
 	for _, n := range bootStrapApps {
 		result, err := r.reconcileEmbeddedApp(ctx, n, resource)
 		if err != nil {
@@ -612,55 +252,25 @@ func (r *LocalbuildReconciler) ReconcileArgoAppsWithGitea(ctx context.Context, r
 	// lower priority packages first then having to delete them
 	for i := len(resource.Spec.PackageConfigs.CustomPackageDirs) - 1; i >= 0; i-- {
 		s := resource.Spec.PackageConfigs.CustomPackageDirs[i]
-		name := fmt.Sprintf("custom-dir-%d", i)
-		if r.StatusReporter != nil {
-			r.StatusReporter.UpdateSubStep("packages", name, 1) // StateRunning
-		}
 		result, err := r.reconcileCustomPkgDir(ctx, resource, s, i)
 		if err != nil {
-			if r.StatusReporter != nil {
-				r.StatusReporter.UpdateSubStep("packages", name, 3) // StateFailed
-			}
 			return result, err
-		}
-		if r.StatusReporter != nil {
-			r.StatusReporter.UpdateSubStep("packages", name, 2) // StateComplete
 		}
 	}
 
 	for i := len(resource.Spec.PackageConfigs.CustomPackageFiles) - 1; i >= 0; i-- {
 		s := resource.Spec.PackageConfigs.CustomPackageFiles[i]
-		name := fmt.Sprintf("custom-file-%d", i)
-		if r.StatusReporter != nil {
-			r.StatusReporter.UpdateSubStep("packages", name, 1) // StateRunning
-		}
 		result, err := r.reconcileCustomPkgFile(ctx, resource, s, i)
 		if err != nil {
-			if r.StatusReporter != nil {
-				r.StatusReporter.UpdateSubStep("packages", name, 3) // StateFailed
-			}
 			return result, err
-		}
-		if r.StatusReporter != nil {
-			r.StatusReporter.UpdateSubStep("packages", name, 2) // StateComplete
 		}
 	}
 
 	for i := len(resource.Spec.PackageConfigs.CustomPackageUrls) - 1; i >= 0; i-- {
 		s := resource.Spec.PackageConfigs.CustomPackageUrls[i]
-		name := fmt.Sprintf("custom-url-%d", i)
-		if r.StatusReporter != nil {
-			r.StatusReporter.UpdateSubStep("packages", name, 1) // StateRunning
-		}
 		result, err := r.reconcileCustomPkgUrl(ctx, resource, s, i)
 		if err != nil {
-			if r.StatusReporter != nil {
-				r.StatusReporter.UpdateSubStep("packages", name, 3) // StateFailed
-			}
 			return result, err
-		}
-		if r.StatusReporter != nil {
-			r.StatusReporter.UpdateSubStep("packages", name, 2) // StateComplete
 		}
 	}
 
@@ -1050,65 +660,7 @@ func (r *LocalbuildReconciler) reconcileCustomPkgFile(ctx context.Context, resou
 	return ctrl.Result{}, nil
 }
 
-func validateGitURL(url, fieldName string) error {
-	if url == "" {
-		return fmt.Errorf("%s is not set", fieldName)
-	}
-	// Validate URL format - must match the GitRepository CRD validation pattern: ^https?:\/\/.+$
-	if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
-		return fmt.Errorf("%s must start with http:// or https://, got: %s", fieldName, url)
-	}
-	// Check that there's content after the protocol (e.g., not just "http://" or "https://")
-	if url == "http://" || url == "https://" {
-		return fmt.Errorf("%s is too short: %s", fieldName, url)
-	}
-	return nil
-}
-
 func (r *LocalbuildReconciler) reconcileGitRepo(ctx context.Context, resource *v1alpha1.Localbuild, repoType, repoName, embeddedName, absPath string) (*v1alpha1.GitRepository, error) {
-	logger := log.FromContext(ctx)
-
-	// Get GiteaProvider using duck-typing to retrieve status
-	// The GiteaProvider is created by the v2 architecture in build.go with name "{buildname}-gitea" in gitea namespace
-	giteaProvider := &v1alpha2.GiteaProvider{}
-	err := r.Get(ctx, client.ObjectKey{
-		Name:      getGiteaProviderName(resource.Name),
-		Namespace: util.GiteaNamespace,
-	}, giteaProvider)
-	if err != nil {
-		return nil, fmt.Errorf("getting GiteaProvider: %w", err)
-	}
-
-	// Convert to unstructured for duck-typing
-	unstructuredProvider := &unstructured.Unstructured{}
-	unstructuredProvider.Object, err = runtime.DefaultUnstructuredConverter.ToUnstructured(giteaProvider)
-	if err != nil {
-		return nil, fmt.Errorf("converting GiteaProvider to unstructured: %w", err)
-	}
-
-	// Use duck-typing to get provider status
-	gitProviderStatus, err := provider.GetGitProviderStatus(unstructuredProvider)
-	if err != nil {
-		return nil, fmt.Errorf("getting git provider status: %w", err)
-	}
-
-	// Check if provider is ready
-	ready, err := provider.IsGitProviderReady(unstructuredProvider)
-	if err != nil {
-		return nil, fmt.Errorf("checking if git provider is ready: %w", err)
-	}
-	if !ready {
-		return nil, errGiteaProviderNotReady
-	}
-
-	// Validate that we have the required URLs and they match the expected pattern
-	if err := validateGitURL(gitProviderStatus.Endpoint, "GiteaProvider endpoint"); err != nil {
-		return nil, err
-	}
-	if err := validateGitURL(gitProviderStatus.InternalEndpoint, "GiteaProvider internal endpoint"); err != nil {
-		return nil, err
-	}
-
 	repo := &v1alpha1.GitRepository{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      repoName,
@@ -1131,31 +683,19 @@ func (r *LocalbuildReconciler) reconcileGitRepo(ctx context.Context, resource *v
 		}
 		util.SetCLIStartTimeAnnotationValue(repo.ObjectMeta.Annotations, cliStartTime)
 
-		// Get credentials secret ref from provider status
-		var secretName, secretNamespace string
-		if gitProviderStatus.CredentialsSecretRef.Name != "" {
-			secretName = gitProviderStatus.CredentialsSecretRef.Name
-			secretNamespace = gitProviderStatus.CredentialsSecretRef.Namespace
-		} else {
-			logger.V(1).Info("Warning: GiteaProvider credentials secret ref is not set")
-			// Fallback to defaults
-			secretName = util.GiteaAdminSecret
-			secretNamespace = util.GiteaNamespace
-		}
-
 		repo.Spec = v1alpha1.GitRepositorySpec{
 			Source: v1alpha1.GitRepositorySource{
 				Type: repoType,
 			},
 			Provider: v1alpha1.Provider{
 				Name:             v1alpha1.GitProviderGitea,
-				GitURL:           gitProviderStatus.Endpoint,
-				InternalGitURL:   gitProviderStatus.InternalEndpoint,
+				GitURL:           resource.Status.Gitea.ExternalURL,
+				InternalGitURL:   resource.Status.Gitea.InternalURL,
 				OrganizationName: v1alpha1.GiteaAdminUserName,
 			},
 			SecretRef: v1alpha1.SecretReference{
-				Name:      secretName,
-				Namespace: secretNamespace,
+				Name:      resource.Status.Gitea.AdminUserSecretName,
+				Namespace: resource.Status.Gitea.AdminUserSecretNamespace,
 			},
 		}
 
@@ -1410,16 +950,6 @@ func getCustomPackageName(fileName, appName string) string {
 	return fmt.Sprintf("%s-%s", strings.ToLower(s[0]), appName)
 }
 
-// getGiteaProviderName returns the name of the GiteaProvider CR for the given build name
-func getGiteaProviderName(buildName string) string {
-	return buildName + "-gitea"
-}
-
-// getArgoCDProviderName returns the name of the ArgoCDProvider CR for the given build name
-func getArgoCDProviderName(buildName string) string {
-	return buildName + "-argocd"
-}
-
 func isSupportedArgoCDTypes(gvk *schema.GroupVersionKind) bool {
 	if gvk == nil {
 		return false
@@ -1431,8 +961,10 @@ func GetEmbeddedRawInstallResources(name string, templateData any, config v1alph
 	switch name {
 	case v1alpha1.ArgoCDPackageName:
 		return RawArgocdInstallResources(templateData, config, scheme)
-	// NOTE: Gitea case removed - now managed by GiteaProvider controller
-	// NOTE: IngressNginx case removed - now managed by NginxGateway controller (v2)
+	case v1alpha1.GiteaPackageName:
+		return RawGiteaInstallResources(templateData, config, scheme)
+	case v1alpha1.IngressNginxPackageName:
+		return RawNginxInstallResources(templateData, config, scheme)
 	default:
 		return nil, fmt.Errorf("unsupported embedded app name %s", name)
 	}
