@@ -11,6 +11,7 @@ import (
 
 	argov1alpha1 "github.com/cnoe-io/argocd-api/api/argo/application/v1alpha1"
 	"github.com/cnoe-io/idpbuilder/api/v1alpha1"
+	"github.com/cnoe-io/idpbuilder/api/v1alpha2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
@@ -33,6 +34,7 @@ func TestReconcileCustomPkg(t *testing.T) {
 		v1.AddToScheme,
 		argov1alpha1.AddToScheme,
 		v1alpha1.AddToScheme,
+		v1alpha2.AddToScheme,
 	)
 	require.NoError(t, sb.AddToScheme(s))
 
@@ -222,6 +224,7 @@ func TestReconcileCustomPkgAppSet(t *testing.T) {
 		v1.AddToScheme,
 		argov1alpha1.AddToScheme,
 		v1alpha1.AddToScheme,
+		v1alpha2.AddToScheme,
 	)
 	require.NoError(t, sb.AddToScheme(s))
 
@@ -541,6 +544,7 @@ func TestReconcileHelmValueObject(t *testing.T) {
 		v1.AddToScheme,
 		argov1alpha1.AddToScheme,
 		v1alpha1.AddToScheme,
+		v1alpha2.AddToScheme,
 	)
 	require.NoError(t, sb.AddToScheme(s))
 
@@ -632,6 +636,7 @@ func TestPackagePriority(t *testing.T) {
 		v1.AddToScheme,
 		argov1alpha1.AddToScheme,
 		v1alpha1.AddToScheme,
+		v1alpha2.AddToScheme,
 	)
 	require.NoError(t, sb.AddToScheme(s))
 

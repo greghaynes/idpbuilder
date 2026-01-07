@@ -12,11 +12,16 @@ import (
 	argocdapplication "github.com/cnoe-io/argocd-api/api/argo/application"
 	argov1alpha1 "github.com/cnoe-io/argocd-api/api/argo/application/v1alpha1"
 	"github.com/cnoe-io/idpbuilder/api/v1alpha1"
+	"github.com/cnoe-io/idpbuilder/api/v1alpha2"
 	"github.com/cnoe-io/idpbuilder/pkg/k8s"
 	"github.com/cnoe-io/idpbuilder/pkg/util"
+	"github.com/cnoe-io/idpbuilder/pkg/util/provider"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -212,6 +217,115 @@ func getPackagePriority(pkg *v1alpha1.CustomPackage) (int, error) {
 	}
 
 	return priority, nil
+}
+
+// gitProviderInfo holds the information needed from a git provider
+type gitProviderInfo struct {
+	externalURL      string
+	internalURL      string
+	secretName       string
+	secretNamespace  string
+	organizationName string
+}
+
+// discoverGitProviderFromPlatform discovers the git provider from the Platform CR in the same namespace
+// Returns nil if no Platform or no git provider is found (backward compatibility with Localbuild)
+func (r *Reconciler) discoverGitProviderFromPlatform(ctx context.Context, namespace string) (*gitProviderInfo, error) {
+	logger := log.FromContext(ctx)
+
+	// List Platform CRs in the namespace
+	platformList := &v1alpha2.PlatformList{}
+	err := r.Client.List(ctx, platformList, client.InNamespace(namespace))
+	if err != nil {
+		return nil, fmt.Errorf("listing platforms: %w", err)
+	}
+
+	if len(platformList.Items) == 0 {
+		// No Platform CR found - this is OK for backward compatibility with Localbuild
+		logger.V(1).Info("No Platform CR found in namespace, falling back to CustomPackage spec", "namespace", namespace)
+		return nil, nil
+	}
+
+	// Use the first Platform CR found
+	platform := &platformList.Items[0]
+	logger.V(1).Info("Found Platform CR", "name", platform.Name, "namespace", platform.Namespace)
+
+	// Get the first git provider from the Platform
+	if len(platform.Spec.Components.GitProviders) == 0 {
+		logger.V(1).Info("No git providers configured in Platform, falling back to CustomPackage spec")
+		return nil, nil
+	}
+
+	gitProviderRef := platform.Spec.Components.GitProviders[0]
+	logger.V(1).Info("Using git provider from Platform", "name", gitProviderRef.Name, "kind", gitProviderRef.Kind)
+
+	// Fetch the git provider using unstructured client for duck-typing
+	gvk := schema.GroupVersionKind{
+		Group:   "idpbuilder.cnoe.io",
+		Version: "v1alpha2",
+		Kind:    gitProviderRef.Kind,
+	}
+
+	providerObj := &unstructured.Unstructured{}
+	providerObj.SetGroupVersionKind(gvk)
+
+	err = r.Client.Get(ctx, types.NamespacedName{
+		Name:      gitProviderRef.Name,
+		Namespace: gitProviderRef.Namespace,
+	}, providerObj)
+
+	if err != nil {
+		if errors.IsNotFound(err) {
+			logger.Info("Git provider not found, falling back to CustomPackage spec", "name", gitProviderRef.Name)
+			return nil, nil
+		}
+		return nil, fmt.Errorf("getting git provider %s: %w", gitProviderRef.Name, err)
+	}
+
+	// Extract git provider status using duck-typing
+	status, err := provider.GetGitProviderStatus(providerObj)
+	if err != nil {
+		return nil, fmt.Errorf("getting git provider status: %w", err)
+	}
+
+	// Check if provider is ready
+	if !status.Ready {
+		logger.V(1).Info("Git provider not ready yet", "name", gitProviderRef.Name)
+		return nil, fmt.Errorf("git provider %s is not ready", gitProviderRef.Name)
+	}
+
+	// Extract organization name - default to GiteaAdminUserName for backward compatibility
+	organizationName := v1alpha1.GiteaAdminUserName
+
+	return &gitProviderInfo{
+		externalURL:      status.Endpoint,
+		internalURL:      status.InternalEndpoint,
+		secretName:       status.CredentialsSecretRef.Name,
+		secretNamespace:  status.CredentialsSecretRef.Namespace,
+		organizationName: organizationName,
+	}, nil
+}
+
+// getGitProviderInfo gets git provider information, preferring Platform CR discovery over CustomPackage spec
+func (r *Reconciler) getGitProviderInfo(ctx context.Context, resource *v1alpha1.CustomPackage) (*gitProviderInfo, error) {
+	// Try to discover from Platform first
+	platformProvider, err := r.discoverGitProviderFromPlatform(ctx, resource.Namespace)
+	if err != nil {
+		return nil, err
+	}
+
+	if platformProvider != nil {
+		return platformProvider, nil
+	}
+
+	// Fall back to CustomPackage spec for backward compatibility with Localbuild
+	return &gitProviderInfo{
+		externalURL:      resource.Spec.GitServerURL,
+		internalURL:      resource.Spec.InternalGitServeURL,
+		secretName:       resource.Spec.GitServerAuthSecretRef.Name,
+		secretNamespace:  resource.Spec.GitServerAuthSecretRef.Namespace,
+		organizationName: v1alpha1.GiteaAdminUserName,
+	}, nil
 }
 
 // create an in-cluster repository CR, update the application spec, then apply
@@ -495,9 +609,14 @@ func (r *Reconciler) reconcileArgoCDSourceFromRemote(ctx context.Context, resour
 	}
 	// GitRepository doesn't exist or we should take it over
 
+	// Get git provider info from Platform or CustomPackage spec
+	providerInfo, err := r.getGitProviderInfo(ctx, resource)
+	if err != nil {
+		return ctrl.Result{}, nil, fmt.Errorf("getting git provider info: %w", err)
+	}
+
 	cliStartTime, _ := util.GetCLIStartTimeAnnotationValue(resource.ObjectMeta.Annotations)
 
-	var err error
 	_, err = controllerutil.CreateOrUpdate(ctx, r.Client, repo, func() error {
 		if err := controllerutil.SetControllerReference(resource, repo, r.Scheme); err != nil {
 			return err
@@ -516,9 +635,9 @@ func (r *Reconciler) reconcileArgoCDSourceFromRemote(ctx context.Context, resour
 			},
 			Provider: v1alpha1.Provider{
 				Name:             v1alpha1.GitProviderGitea,
-				GitURL:           resource.Spec.GitServerURL,
-				InternalGitURL:   resource.Spec.InternalGitServeURL,
-				OrganizationName: v1alpha1.GiteaAdminUserName,
+				GitURL:           providerInfo.externalURL,
+				InternalGitURL:   providerInfo.internalURL,
+				OrganizationName: providerInfo.organizationName,
 			},
 			SecretRef: resource.Spec.GitServerAuthSecretRef,
 		}
@@ -573,6 +692,12 @@ func (r *Reconciler) reconcileArgoCDSourceFromLocal(ctx context.Context, resourc
 	}
 	// GitRepository doesn't exist or we should take it over
 
+	// Get git provider info from Platform or CustomPackage spec
+	providerInfo, err := r.getGitProviderInfo(ctx, resource)
+	if err != nil {
+		return ctrl.Result{}, nil, fmt.Errorf("getting git provider info: %w", err)
+	}
+
 	cliStartTime, _ := util.GetCLIStartTimeAnnotationValue(resource.ObjectMeta.Annotations)
 
 	_, err = controllerutil.CreateOrUpdate(ctx, r.Client, repo, func() error {
@@ -592,9 +717,9 @@ func (r *Reconciler) reconcileArgoCDSourceFromLocal(ctx context.Context, resourc
 			},
 			Provider: v1alpha1.Provider{
 				Name:             v1alpha1.GitProviderGitea,
-				GitURL:           resource.Spec.GitServerURL,
-				InternalGitURL:   resource.Spec.InternalGitServeURL,
-				OrganizationName: v1alpha1.GiteaAdminUserName,
+				GitURL:           providerInfo.externalURL,
+				InternalGitURL:   providerInfo.internalURL,
+				OrganizationName: providerInfo.organizationName,
 			},
 			SecretRef: resource.Spec.GitServerAuthSecretRef,
 		}
@@ -609,6 +734,8 @@ func (r *Reconciler) reconcileArgoCDSourceFromLocal(ctx context.Context, resourc
 
 	return ctrl.Result{}, repo, nil
 }
+
+//+kubebuilder:rbac:groups=idpbuilder.cnoe.io,resources=platforms,verbs=get;list;watch
 
 func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
