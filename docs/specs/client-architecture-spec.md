@@ -97,121 +97,174 @@ This design ensures:
 
 A critical aspect of the architecture is how controllers for provider resources (GiteaProvider, NginxGateway, ArgoCDProvider, etc.) are installed before their CRs are created.
 
-**Infrastructure Manager Responsibilities:**
+**ArgoCD-Driven Dependency Installation:**
 
-The Infrastructure Manager installs core IDP Builder controllers during cluster provisioning:
+Flavors explicitly declare their dependencies (Helm charts or Kustomize packages) that provide the necessary controllers and CRDs. The Flavor Manager creates ArgoCD Applications for these dependencies and waits for them to become healthy before proceeding.
 
-```go
-type InfraConfig struct {
-    KubernetesVersion string
-    InstallControllers bool  // Default: true for local clusters
-    ControllerVersion string  // Default: "latest"
-}
-
-// During Provision()
-if config.InstallControllers {
-    // Install CRDs and controllers
-    err := installIDPBuilderControllers(ctx, kubeClient, config.ControllerVersion)
-    // This installs:
-    // - GiteaProvider CRD + controller
-    // - NginxGateway CRD + controller
-    // - ArgoCDProvider CRD + controller
-    // - Platform CRD + controller
-    // - PlatformInstallation CRD + controller
-}
-```
-
-**Helm-Packaged Flavors:**
-
-For Helm charts, controller installation is declared as a dependency:
+**Flavor Dependency Declaration:**
 
 ```yaml
-# Chart.yaml
-apiVersion: v2
-name: idpbuilder-basic-dev
-version: 1.0.0
-
-dependencies:
-  # Core IDP Builder controllers (installs CRDs + controllers)
-  - name: idpbuilder-controllers
-    version: "^0.5.0"
-    repository: "https://cnoe-io.github.io/idpbuilder"
-    
-  # Provider-specific controllers (optional, if not included in core)
-  - name: nginx-ingress-controller
-    version: "4.8.0"
-    repository: "https://kubernetes.github.io/ingress-nginx"
-    condition: gateway.installController
-```
-
-Helm automatically installs dependencies before the main chart, ensuring controllers are available before provider CRs are created.
-
-**Kustomize-Packaged Flavors:**
-
-For Kustomize, controller installation uses resource ordering or ArgoCD sync waves:
-
-```yaml
-# flavors/basic-dev/kustomization.yaml
-apiVersion: kustomize.config.k8s.io/v1beta1
-kind: Kustomization
-
-resources:
-  # Install controllers first
-  - https://github.com/cnoe-io/idpbuilder/releases/v0.5.0/download/controllers.yaml
-  
-  # Then provider CRs (will wait for CRDs to be available)
-  - gitea-provider.yaml
-  - nginx-gateway.yaml
-  - argocd-provider.yaml
-  - platform.yaml
-```
-
-With ArgoCD sync waves for explicit ordering:
-
-```yaml
-# controllers.yaml
+apiVersion: idpbuilder.cnoe.io/v1alpha1
+kind: Flavor
 metadata:
-  annotations:
-    argocd.argoproj.io/sync-wave: "1"  # Install controllers first
-
----
-# gitea-provider.yaml
-metadata:
-  annotations:
-    argocd.argoproj.io/sync-wave: "2"  # Install providers after controllers
+  name: basic-dev
+spec:
+  # Dependencies installed via ArgoCD
+  dependencies:
+    - name: idpbuilder-controllers
+      type: helm
+      source:
+        repoURL: https://cnoe-io.github.io/idpbuilder
+        chart: idpbuilder-controllers
+        targetRevision: "0.5.0"
+      syncWave: 1  # Install first
+      
+    - name: nginx-ingress
+      type: helm
+      source:
+        repoURL: https://kubernetes.github.io/ingress-nginx
+        chart: ingress-nginx
+        targetRevision: "4.8.0"
+      syncWave: 2  # Install after controllers
+      condition: gateway.enabled  # Optional
+      
+    - name: custom-operators
+      type: kustomize
+      source:
+        repoURL: https://github.com/example/operators
+        path: deploy/overlays/production
+        targetRevision: main
+      syncWave: 2
 ```
 
-**Controller Discovery and Validation:**
+**Flavor Manager ArgoCD Application Creation:**
 
-The Flavor Manager validates that required controllers are available before creating CRs:
+The Flavor Manager generates ArgoCD Applications for each dependency:
 
 ```go
 type FlavorManager interface {
-    // ValidateFlavor checks that required controllers are installed
-    ValidateFlavor(ctx context.Context, flavor *Flavor, kubeClient client.Client) error
+    // InstallDependencies creates ArgoCD Applications for flavor dependencies
+    InstallDependencies(ctx context.Context, flavor *Flavor, namespace string) error
+    
+    // WaitForDependencies waits until all dependency Applications are healthy
+    WaitForDependencies(ctx context.Context, flavor *Flavor, timeout time.Duration) error
+    
+    // InstallComponents creates provider CRs after dependencies are ready
+    InstallComponents(ctx context.Context, flavor *Flavor) error
 }
 
-func (m *Manager) ValidateFlavor(ctx context.Context, flavor *Flavor, kubeClient client.Client) error {
-    // Check that required CRDs exist
-    for _, component := range flavor.Spec.Components {
-        crdName := component.Kind + "s.idpbuilder.cnoe.io"
-        if !crdExists(ctx, kubeClient, crdName) {
-            return fmt.Errorf("required CRD %s not found, install controllers first", crdName)
+func (m *Manager) InstallDependencies(ctx context.Context, flavor *Flavor, namespace string) error {
+    for _, dep := range flavor.Spec.Dependencies {
+        // Skip if condition not met
+        if dep.Condition != "" && !evaluateCondition(dep.Condition, flavor) {
+            continue
+        }
+        
+        // Create ArgoCD Application for this dependency
+        app := &argocdv1alpha1.Application{
+            ObjectMeta: metav1.ObjectMeta{
+                Name:      fmt.Sprintf("%s-%s", flavor.Name, dep.Name),
+                Namespace: namespace,
+                Annotations: map[string]string{
+                    "argocd.argoproj.io/sync-wave": strconv.Itoa(dep.SyncWave),
+                },
+            },
+            Spec: argocdv1alpha1.ApplicationSpec{
+                Project: "default",
+                Source: argocdv1alpha1.ApplicationSource{
+                    RepoURL:        dep.Source.RepoURL,
+                    TargetRevision: dep.Source.TargetRevision,
+                },
+                Destination: argocdv1alpha1.ApplicationDestination{
+                    Server:    "https://kubernetes.default.svc",
+                    Namespace: namespace,
+                },
+                SyncPolicy: &argocdv1alpha1.SyncPolicy{
+                    Automated: &argocdv1alpha1.SyncPolicyAutomated{
+                        Prune:    true,
+                        SelfHeal: true,
+                    },
+                },
+            },
+        }
+        
+        // Set source type-specific fields
+        if dep.Type == "helm" {
+            app.Spec.Source.Chart = dep.Source.Chart
+        } else if dep.Type == "kustomize" {
+            app.Spec.Source.Path = dep.Source.Path
+        }
+        
+        // Create the Application
+        err := kubeClient.Create(ctx, app)
+        if err != nil && !errors.IsAlreadyExists(err) {
+            return fmt.Errorf("failed to create Application for %s: %w", dep.Name, err)
         }
     }
+    return nil
+}
+
+func (m *Manager) WaitForDependencies(ctx context.Context, flavor *Flavor, timeout time.Duration) error {
+    ctx, cancel := context.WithTimeout(ctx, timeout)
+    defer cancel()
+    
+    for _, dep := range flavor.Spec.Dependencies {
+        if dep.Condition != "" && !evaluateCondition(dep.Condition, flavor) {
+            continue
+        }
+        
+        appName := fmt.Sprintf("%s-%s", flavor.Name, dep.Name)
+        
+        // Poll until Application is Healthy and Synced
+        err := wait.PollUntilContextTimeout(ctx, 5*time.Second, timeout, true, func(ctx context.Context) (bool, error) {
+            app := &argocdv1alpha1.Application{}
+            err := kubeClient.Get(ctx, types.NamespacedName{
+                Name:      appName,
+                Namespace: "argocd",
+            }, app)
+            if err != nil {
+                return false, err
+            }
+            
+            // Check if Application is healthy and synced
+            if app.Status.Health.Status == argocdv1alpha1.HealthStatusHealthy &&
+               app.Status.Sync.Status == argocdv1alpha1.SyncStatusCodeSynced {
+                return true, nil
+            }
+            
+            return false, nil
+        })
+        
+        if err != nil {
+            return fmt.Errorf("dependency %s not ready: %w", dep.Name, err)
+        }
+    }
+    
     return nil
 }
 ```
 
 **Installation Sequence:**
 
-1. **Infrastructure Manager** provisions cluster and installs core controllers (for local/managed clusters)
-2. **Flavor packaging** (Helm/Kustomize) declares additional controller dependencies
-3. **Package manager** (Helm/ArgoCD) installs controllers before provider CRs
-4. **Flavor Manager** validates controllers are available
-5. **CR Generator** creates provider CRs referencing the now-available controller types
+1. **Infrastructure Manager** provisions cluster and installs ArgoCD (ArgoCD is a core prerequisite)
+2. **Flavor Manager** creates ArgoCD Applications for each dependency in sync-wave order
+3. **ArgoCD** installs dependencies (controllers, CRDs) and reports health status
+4. **Flavor Manager** waits for all dependency Applications to become Healthy
+5. **Flavor Manager** creates provider CRs (components) as additional ArgoCD Applications with higher sync-wave
+6. **ArgoCD** installs components after dependencies are ready
+7. **Flavor Manager** creates Platform CR to coordinate all components
 
-This ensures controllers are always installed before the CRs that depend on them.
+**Benefits of ArgoCD-Driven Dependencies:**
+
+- ✅ Declarative dependency management in flavor spec
+- ✅ Automatic retry and self-healing via ArgoCD
+- ✅ Clear health status and sync state visibility
+- ✅ Sync waves ensure correct installation order
+- ✅ Works with both Helm and Kustomize sources
+- ✅ GitOps-friendly: dependencies tracked in Git
+- ✅ Conditional dependencies (e.g., only install if gateway.enabled)
+
+This ensures controllers are always installed and healthy before the CRs that depend on them.
 
 ### Component Responsibilities
 
@@ -222,7 +275,8 @@ This ensures controllers are always installed before the CRs that depend on them
 **Responsibilities**:
 - Create local Kubernetes clusters (kind, k3s, etc.)
 - Connect to existing/remote Kubernetes clusters
-- Install core dependencies (CRDs, controllers)
+- Install ArgoCD as core dependency (required for flavor dependency management)
+- Install IDP Builder CRDs and controllers
 - Configure networking (CoreDNS, ingress)
 - Set up TLS certificates
 - Manage cluster lifecycle
@@ -266,10 +320,11 @@ infraMgr := infrastructure.NewManager(
     infrastructure.WithClusterName("my-idp"),
 )
 
-// Provision infrastructure with controller installation
+// Provision infrastructure with ArgoCD and IDP Builder controllers
 result, err := infraMgr.Provision(ctx, infrastructure.Config{
     KubernetesVersion: "1.28.0",
-    InstallControllers: true,  // Install IDP Builder controllers
+    InstallArgoCD: true,        // Install ArgoCD (required for flavor dependencies)
+    InstallControllers: true,    // Install IDP Builder CRDs and controllers
     ControllerVersion: "v0.5.0",
     Networking: infrastructure.NetworkConfig{
         ServiceCIDR: "10.96.0.0/16",
@@ -277,8 +332,8 @@ result, err := infraMgr.Provision(ctx, infrastructure.Config{
     },
 })
 
-// Controllers are now installed and ready
-// CRDs available: GiteaProvider, NginxGateway, ArgoCDProvider, Platform
+// ArgoCD and IDP Builder controllers are now installed and ready
+// Ready to install flavors with dependencies
 ```
 
 #### 2. Flavor Manager
@@ -287,11 +342,12 @@ result, err := infraMgr.Provision(ctx, infrastructure.Config{
 
 **Responsibilities**:
 - Load flavor definitions from files or embedded resources
-- Validate flavor configurations and controller availability
-- Generate appropriate Custom Resources for the selected flavor
+- Create ArgoCD Applications for flavor dependencies (Helm charts, Kustomize packages)
+- Wait for dependency Applications to become Healthy before proceeding
+- Generate and install provider Custom Resources as ArgoCD Applications
 - Support flavor composition (extending base flavors)
 - Handle flavor-specific configuration overrides
-- Verify required CRDs are installed before generating provider CRs
+- Coordinate installation sequence using ArgoCD sync waves
 
 **Flavor Definition Format**:
 ```yaml
@@ -302,19 +358,41 @@ metadata:
   name: basic-dev
   description: Basic development environment with Gitea, Nginx, and ArgoCD
 spec:
-  # Components to install
+  # Dependencies to install via ArgoCD before components
+  # These provide the CRDs and controllers needed by components
+  dependencies:
+    - name: idpbuilder-controllers
+      type: helm
+      source:
+        repoURL: https://cnoe-io.github.io/idpbuilder
+        chart: idpbuilder-controllers
+        targetRevision: "0.5.0"
+      syncWave: 1  # Install first
+      
+    - name: nginx-ingress
+      type: helm
+      source:
+        repoURL: https://kubernetes.github.io/ingress-nginx
+        chart: ingress-nginx
+        targetRevision: "4.8.0"
+      syncWave: 2  # Install after controllers
+      condition: gateway.enabled  # Optional dependency
+      
+  # Components to install (creates CRs after dependencies are ready)
   components:
     gitProvider:
       kind: GiteaProvider
       version: "1.21.0"
       config:
         adminAutoGenerate: true
+      syncWave: 3  # Install after dependencies
         
     gateway:
       kind: NginxGateway
       version: "1.13.0"
       config:
         ingressClass: nginx
+      syncWave: 3
         
     gitOpsProvider:
       kind: ArgoCDProvider
@@ -322,6 +400,7 @@ spec:
       config:
         adminAutoGenerate: true
         ssoEnabled: false
+      syncWave: 3
         
   # Platform configuration
   platform:
@@ -329,14 +408,25 @@ spec:
     tls:
       enabled: true
       selfSigned: true
+    syncWave: 4  # Install after components
       
   # Custom packages to include
   customPackages:
     - name: backstage
-      source: https://github.com/cnoe-io/backstage-app
+      type: kustomize
+      source:
+        repoURL: https://github.com/cnoe-io/backstage-app
+        path: deploy/kubernetes
+        targetRevision: main
+      syncWave: 5
       
     - name: crossplane
-      source: https://github.com/cnoe-io/crossplane-configs
+      type: helm
+      source:
+        repoURL: https://charts.crossplane.io/stable
+        chart: crossplane
+        targetRevision: "1.14.0"
+      syncWave: 5
 ```
 
 **Interfaces**:
@@ -348,11 +438,17 @@ type FlavorManager interface {
     // GetFlavor loads a specific flavor definition
     GetFlavor(name string) (*Flavor, error)
     
-    // GenerateResources generates CRs for the given flavor
-    GenerateResources(flavor *Flavor, overrides map[string]interface{}) ([]client.Object, error)
+    // InstallDependencies creates ArgoCD Applications for flavor dependencies
+    InstallDependencies(ctx context.Context, flavor *Flavor, namespace string) error
     
-    // ValidateFlavor validates a flavor definition and checks controller availability
-    ValidateFlavor(ctx context.Context, flavor *Flavor, kubeClient client.Client) error
+    // WaitForDependencies waits until all dependency Applications are healthy
+    WaitForDependencies(ctx context.Context, flavor *Flavor, timeout time.Duration) error
+    
+    // InstallComponents creates provider CRs after dependencies are ready
+    InstallComponents(ctx context.Context, flavor *Flavor) error
+    
+    // GenerateResources generates CRs for the given flavor (for non-ArgoCD usage)
+    GenerateResources(flavor *Flavor, overrides map[string]interface{}) ([]client.Object, error)
 }
 
 type FlavorRegistry interface {
@@ -394,13 +490,15 @@ See [Appendix B: Example Flavors](#appendix-b-example-flavors) for complete defi
 
 **Example Usage**:
 ```go
-// 1. Provision infrastructure first
+// 1. Provision infrastructure with ArgoCD and IDP Builder controllers
 infraMgr := infrastructure.NewManager(
     infrastructure.WithProvider(kind.NewProvider()),
     infrastructure.WithClusterName("my-idp"),
 )
 result, err := infraMgr.Provision(ctx, infrastructure.Config{
     KubernetesVersion: "1.28.0",
+    InstallArgoCD: true,         // Required for dependency management
+    InstallControllers: true,    // Install IDP Builder controllers
 })
 
 // 2. Get kubeconfig from infrastructure manager
@@ -415,25 +513,26 @@ flavorMgr := flavor.NewManager(
 
 flavor, err := flavorMgr.GetFlavor("basic-dev")
 
-// 4. Validate that required controllers are installed
-err = flavorMgr.ValidateFlavor(ctx, flavor, kubeClient)
+// 4. Install flavor dependencies via ArgoCD
+err = flavorMgr.InstallDependencies(ctx, flavor, "argocd")
 if err != nil {
-    // Controllers not available, need to install them first
-    return fmt.Errorf("flavor validation failed: %w", err)
+    return fmt.Errorf("failed to install dependencies: %w", err)
 }
 
-// 5. Generate resources with overrides
-overrides := map[string]interface{}{
-    "platform.domain": "my-company.dev",
-    "gitProvider.config.adminPassword": "secret123",
+// 5. Wait for dependencies to become healthy
+err = flavorMgr.WaitForDependencies(ctx, flavor, 10*time.Minute)
+if err != nil {
+    return fmt.Errorf("dependencies not ready: %w", err)
 }
 
-resources, err := flavorMgr.GenerateResources(flavor, overrides)
-
-// 6. Apply to cluster using kubeconfig from infrastructure manager
-for _, resource := range resources {
-    err := kubeClient.Create(ctx, resource)
+// 6. Install components (provider CRs) after dependencies are ready
+err = flavorMgr.InstallComponents(ctx, flavor)
+if err != nil {
+    return fmt.Errorf("failed to install components: %w", err)
 }
+
+// ArgoCD now manages the entire flavor installation
+// Check Application status for deployment progress
 ```
 
 ### Flavor Packaging, Distribution, and Consumption
@@ -1556,18 +1655,38 @@ metadata:
     complexity: basic
     type: built-in
 spec:
+  # Dependencies installed via ArgoCD
+  dependencies:
+    - name: idpbuilder-controllers
+      type: helm
+      source:
+        repoURL: https://cnoe-io.github.io/idpbuilder
+        chart: idpbuilder-controllers
+        targetRevision: "0.5.0"
+      syncWave: 1
+      
+    - name: nginx-ingress
+      type: helm
+      source:
+        repoURL: https://kubernetes.github.io/ingress-nginx
+        chart: ingress-nginx
+        targetRevision: "4.8.0"
+      syncWave: 2
+      
   components:
     gitProvider:
       kind: GiteaProvider
       version: "1.21.0"
       config:
         adminAutoGenerate: true
+      syncWave: 3
         
     gateway:
       kind: NginxGateway
       version: "1.13.0"
       config:
         ingressClass: nginx
+      syncWave: 3
         
     gitOpsProvider:
       kind: ArgoCDProvider
@@ -1575,12 +1694,14 @@ spec:
       config:
         adminAutoGenerate: true
         ssoEnabled: false
+      syncWave: 3
         
   platform:
     domain: "cnoe.localtest.me"
     tls:
       enabled: true
       selfSigned: true
+    syncWave: 4
 ```
 
 ### Full Development Flavor (Example)
@@ -1600,15 +1721,45 @@ metadata:
 spec:
   extends: basic-dev
   
+  # Additional dependencies for extended tools
+  dependencies:
+    - name: crossplane
+      type: helm
+      source:
+        repoURL: https://charts.crossplane.io/stable
+        chart: crossplane
+        targetRevision: "1.14.0"
+      syncWave: 2
+  
   customPackages:
     - name: backstage
-      source: https://github.com/cnoe-io/backstage-app
-      priority: 100
+      type: kustomize
+      source:
+        repoURL: https://github.com/cnoe-io/backstage-app
+        path: deploy/kubernetes
+        targetRevision: main
+      syncWave: 5
       
-    - name: crossplane
-      source: https://github.com/cnoe-io/crossplane-configs
-      priority: 200
+    - name: crossplane-configs
+      type: kustomize
+      source:
+        repoURL: https://github.com/cnoe-io/crossplane-configs
+        path: configs
+        targetRevision: main
+      syncWave: 6
       
+    - name: vault
+      type: helm
+      source:
+        repoURL: https://helm.releases.hashicorp.com
+        chart: vault
+        targetRevision: "0.27.0"
+      syncWave: 5
+      values:
+        server:
+          dev:
+            enabled: true
+```
     - name: vault
       source: https://github.com/cnoe-io/vault-config
       priority: 150
