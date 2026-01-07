@@ -1529,7 +1529,7 @@ statusWatcher.WaitForReady(ctx, platformName, timeout)
 
 - [Controller Architecture Spec](./controller-architecture-spec.md) - Controller design
 - [Resource Creation Sequencing](./resource-creation-sequencing.md) - Resource tracking
-- [Next Steps to Remove Localbuild](../implementation/next-steps-remove-localbuild.md) - Current migration plan
+- [Implementation Roadmap](../implementation/implementation-roadmap.md) - Current implementation status and remaining work
 
 ## Appendix A: Flavor Schema
 
