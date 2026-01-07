@@ -524,7 +524,7 @@ func (r *PlatformReconciler) createBootstrapResources(ctx context.Context, platf
 	bootstrapApps := []string{v1alpha1.ArgoCDPackageName}
 
 	for _, appName := range bootstrapApps {
-		logger.V(1).Info("Creating bootstrap GitRepository and Application", "app", appName)
+		logger.V(1).Info("Creating bootstrap GitRepository", "app", appName)
 
 		// Create GitRepository CR
 		repo, err := r.createGitRepository(ctx, platform, buildName, appName, gitProviderStatus)
@@ -532,9 +532,17 @@ func (r *PlatformReconciler) createBootstrapResources(ctx context.Context, platf
 			return fmt.Errorf("creating GitRepository for %s: %w", appName, err)
 		}
 
-		// Create ArgoCD Application CR
-		if err := r.createArgoCDApplication(ctx, platform, appName, repo); err != nil {
-			return fmt.Errorf("creating ArgoCD Application for %s: %w", appName, err)
+		// Only create ArgoCD Application if GitRepository has been reconciled and has a URL
+		// Otherwise, we'll create it on the next reconciliation
+		if repo.Status.InternalGitRepositoryUrl != "" {
+			logger.V(1).Info("Creating ArgoCD Application", "app", appName)
+			if err := r.createArgoCDApplication(ctx, platform, appName, repo); err != nil {
+				return fmt.Errorf("creating ArgoCD Application for %s: %w", appName, err)
+			}
+		} else {
+			logger.V(1).Info("GitRepository not yet reconciled, will create Application on next reconciliation", "app", appName)
+			// Don't mark as complete yet - we'll need to reconcile again
+			return nil
 		}
 	}
 
@@ -596,8 +604,9 @@ func (r *PlatformReconciler) createGitRepository(ctx context.Context, platform *
 			secretName = gitProviderStatus.CredentialsSecretRef.Name
 			secretNamespace = gitProviderStatus.CredentialsSecretRef.Namespace
 		} else {
-			logger.V(1).Info("Warning: Git provider credentials secret ref is not set")
-			// Fallback to defaults for Gitea
+			// Fallback to Gitea defaults for backward compatibility
+			// This should be removed once all providers properly set CredentialsSecretRef
+			logger.V(1).Info("Warning: Git provider credentials secret ref is not set, using Gitea defaults")
 			secretName = util.GiteaAdminSecret
 			secretNamespace = util.GiteaNamespace
 		}
@@ -608,6 +617,9 @@ func (r *PlatformReconciler) createGitRepository(ctx context.Context, platform *
 				EmbeddedAppName: appName,
 			},
 			Provider: v1alpha1.Provider{
+				// NOTE: This uses v1alpha1 provider name, not v1alpha2 provider Kind
+				// v1alpha1.GitRepository expects provider names like "gitea" or "github"
+				// not v1alpha2 provider types like "GiteaProvider"
 				Name:             v1alpha1.GitProviderGitea,
 				GitURL:           gitProviderStatus.Endpoint,
 				InternalGitURL:   gitProviderStatus.InternalEndpoint,

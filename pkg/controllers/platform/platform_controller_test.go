@@ -449,10 +449,20 @@ func TestPlatformReconciler_createBootstrapResources(t *testing.T) {
 						},
 					},
 				},
+				// Pre-create GitRepository with status so Application can be created
+				&v1alpha1.GitRepository{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "argocd",
+						Namespace: "idpbuilder-test",
+					},
+					Status: v1alpha1.GitRepositoryStatus{
+						InternalGitRepositoryUrl: "http://gitea-http.gitea.svc.cluster.local:3000/giteaAdmin/argocd.git",
+					},
+				},
 			},
 			expectError: false,
 			validateRepos: func(t *testing.T, c client.Client, p *v1alpha2.Platform) {
-				// Check that GitRepository was created
+				// Check that GitRepository was created/updated
 				repo := &v1alpha1.GitRepository{}
 				err := c.Get(context.Background(), types.NamespacedName{
 					Name:      "argocd",
@@ -463,6 +473,15 @@ func TestPlatformReconciler_createBootstrapResources(t *testing.T) {
 				assert.Equal(t, "argocd", repo.Spec.Source.EmbeddedAppName)
 				assert.Equal(t, "http://gitea.test.local", repo.Spec.Provider.GitURL)
 				assert.Equal(t, "http://gitea-http.gitea.svc.cluster.local:3000", repo.Spec.Provider.InternalGitURL)
+
+				// Check that ArgoCD Application was created
+				app := &argov1alpha1.Application{}
+				err = c.Get(context.Background(), types.NamespacedName{
+					Name:      "argocd",
+					Namespace: "argocd",
+				}, app)
+				require.NoError(t, err)
+				assert.Equal(t, "http://gitea-http.gitea.svc.cluster.local:3000/giteaAdmin/argocd.git", app.Spec.Source.RepoURL)
 
 				// Check that platform annotation was set
 				updatedPlatform := &v1alpha2.Platform{}
@@ -508,6 +527,78 @@ func TestPlatformReconciler_createBootstrapResources(t *testing.T) {
 					Namespace: "idpbuilder-test",
 				}, repo)
 				assert.True(t, errors.IsNotFound(err))
+			},
+		},
+		{
+			name: "waits for GitRepository to be reconciled",
+			platform: &v1alpha2.Platform{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-platform",
+					Namespace: "default",
+					UID:       "platform-uid-789",
+				},
+				Spec: v1alpha2.PlatformSpec{
+					Domain: "test.local",
+					Components: v1alpha2.PlatformComponents{
+						GitProviders: []v1alpha2.ProviderReference{
+							{
+								Name:      "test-gitea",
+								Kind:      "GiteaProvider",
+								Namespace: "gitea",
+							},
+						},
+					},
+				},
+			},
+			providers: []client.Object{
+				&v1alpha2.GiteaProvider{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-gitea",
+						Namespace: "gitea",
+					},
+					Status: v1alpha2.GiteaProviderStatus{
+						Endpoint:         "http://gitea.test.local",
+						InternalEndpoint: "http://gitea-http.gitea.svc.cluster.local:3000",
+						CredentialsSecretRef: &v1alpha2.SecretReference{
+							Name:      "gitea-credential",
+							Namespace: "gitea",
+						},
+						Conditions: []metav1.Condition{
+							{
+								Type:   "Ready",
+								Status: metav1.ConditionTrue,
+							},
+						},
+					},
+				},
+			},
+			expectError: false,
+			validateRepos: func(t *testing.T, c client.Client, p *v1alpha2.Platform) {
+				// Check that GitRepository was created
+				repo := &v1alpha1.GitRepository{}
+				err := c.Get(context.Background(), types.NamespacedName{
+					Name:      "argocd",
+					Namespace: "idpbuilder-test",
+				}, repo)
+				require.NoError(t, err)
+
+				// ArgoCD Application should not be created yet
+				app := &argov1alpha1.Application{}
+				err = c.Get(context.Background(), types.NamespacedName{
+					Name:      "argocd",
+					Namespace: "argocd",
+				}, app)
+				assert.True(t, errors.IsNotFound(err), "Application should not be created yet")
+
+				// Platform annotation should not be set yet
+				updatedPlatform := &v1alpha2.Platform{}
+				err = c.Get(context.Background(), types.NamespacedName{
+					Name:      p.Name,
+					Namespace: p.Namespace,
+				}, updatedPlatform)
+				require.NoError(t, err)
+				_, hasAnnotation := updatedPlatform.Annotations[bootstrapReposCreatedFlag]
+				assert.False(t, hasAnnotation, "Bootstrap annotation should not be set yet")
 			},
 		},
 		{
