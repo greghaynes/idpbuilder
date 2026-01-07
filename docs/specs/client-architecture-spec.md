@@ -58,15 +58,40 @@ graph TB
         StatusWatcher --> UIRenderer[UI Renderer]
     end
     
-    KindProvider --> LocalInfra[Local Kind Cluster]
-    K3sProvider --> LocalInfra2[Local K3s Cluster]
-    ExternalProvider --> RemoteCluster[Remote Kubernetes]
+    subgraph "Kubernetes Infrastructure"
+        K8sCluster[Kubernetes Cluster]
+        K8sAPI[Kubernetes API Server]
+        K8sCluster --> K8sAPI
+    end
     
-    CRGenerator --> K8sAPI[Kubernetes API]
+    KindProvider -.provisions.-> K8sCluster
+    K3sProvider -.provisions.-> K8sCluster
+    ExternalProvider -.connects to.-> K8sCluster
+    
+    InfraManager -.provides kubeconfig.-> CRGenerator
+    InfraManager -.provides kubeconfig.-> PlatformMonitor
+    
+    CRGenerator --> K8sAPI
     PlatformMonitor --> K8sAPI
     
     UIRenderer --> Terminal[Terminal Output]
 ```
+
+### Component Interaction Flow
+
+The architecture follows a clear separation where the Infrastructure Manager provisions the Kubernetes cluster and provides access credentials to other components:
+
+1. **Infrastructure Manager** provisions or connects to a Kubernetes cluster
+2. **Infrastructure Manager** returns a `kubeconfig` via `GetKubeConfig()`
+3. **Flavor Manager's CR Generator** uses the kubeconfig to create Custom Resources in the cluster
+4. **Status Watcher's Platform Monitor** uses the kubeconfig to watch resources in the cluster
+5. All Kubernetes API interactions go through the cluster provisioned by Infrastructure Manager
+
+This design ensures:
+- Single source of truth for cluster access (Infrastructure Manager)
+- No ambiguity about which Kubernetes cluster is being used
+- Clean dependency injection pattern
+- Components can be tested independently with mock kubeconfigs
 
 ### Component Responsibilities
 
@@ -247,7 +272,20 @@ type FlavorRegistry interface {
 
 **Example Usage**:
 ```go
-// Load a flavor
+// 1. Provision infrastructure first
+infraMgr := infrastructure.NewManager(
+    infrastructure.WithProvider(kind.NewProvider()),
+    infrastructure.WithClusterName("my-idp"),
+)
+result, err := infraMgr.Provision(ctx, infrastructure.Config{
+    KubernetesVersion: "1.28.0",
+})
+
+// 2. Get kubeconfig from infrastructure manager
+kubeConfig, err := infraMgr.GetKubeConfig()
+kubeClient, err := client.New(kubeConfig, client.Options{})
+
+// 3. Load a flavor
 flavorMgr := flavor.NewManager(
     flavor.WithBuiltInFlavors(),
     flavor.WithCustomFlavorPath("./my-flavors"),
@@ -255,7 +293,7 @@ flavorMgr := flavor.NewManager(
 
 flavor, err := flavorMgr.GetFlavor("basic-dev")
 
-// Generate resources with overrides
+// 4. Generate resources with overrides
 overrides := map[string]interface{}{
     "platform.domain": "my-company.dev",
     "gitProvider.config.adminPassword": "secret123",
@@ -263,7 +301,7 @@ overrides := map[string]interface{}{
 
 resources, err := flavorMgr.GenerateResources(flavor, overrides)
 
-// Apply to cluster
+// 5. Apply to cluster using kubeconfig from infrastructure manager
 for _, resource := range resources {
     err := kubeClient.Create(ctx, resource)
 }
@@ -862,7 +900,11 @@ type UIRenderer interface {
 
 **Example Usage**:
 ```go
-// Create status watcher
+// Get kubeconfig from infrastructure manager
+kubeConfig, err := infraMgr.GetKubeConfig()
+kubeClient, err := client.New(kubeConfig, client.Options{})
+
+// Create status watcher with kubeClient from infrastructure
 watcher := status.NewWatcher(kubeClient,
     status.WithRenderer(status.NewInteractiveRenderer()),
     status.WithUpdateInterval(5 * time.Second),
