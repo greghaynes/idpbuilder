@@ -36,7 +36,7 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           projectName: idpbuilder
           directory: public
-          # Optional: Enable this to create deployment on pull requests
+          # Note: gitHubToken is not needed here as we post a custom comment below
           # gitHubToken: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Post preview comment
@@ -48,7 +48,17 @@ jobs:
             const environment = '${{ steps.cloudflare-deploy.outputs.environment }}';
             const commitSha = context.sha.substring(0, 7);
             
-            const commentBody = `## 📄 Documentation Preview
+            // Validate that we have a deployment URL
+            if (!deploymentUrl || deploymentUrl === '') {
+              core.setFailed('Deployment URL is not available from Cloudflare Pages action');
+              return;
+            }
+            
+            // Unique identifier for our comment to avoid conflicts with other bots
+            const commentIdentifier = '<!-- cloudflare-pages-preview-comment -->';
+            
+            const commentBody = `${commentIdentifier}
+            ## 📄 Documentation Preview
             
             The documentation site has been deployed to Cloudflare Pages.
             
@@ -59,7 +69,7 @@ jobs:
             
             **🔗 [View Preview Deployment](${deploymentUrl})**`;
             
-            // Find existing preview comment
+            // Find existing preview comment by looking for our unique identifier
             const { data: comments } = await github.rest.issues.listComments({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -67,8 +77,7 @@ jobs:
             });
             
             const botComment = comments.find(comment => 
-              comment.user.type === 'Bot' && 
-              comment.body.includes('Documentation Preview')
+              comment.body.includes(commentIdentifier)
             );
             
             if (botComment) {
