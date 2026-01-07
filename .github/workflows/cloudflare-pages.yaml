@@ -14,6 +14,7 @@ jobs:
     permissions:
       contents: read
       deployments: write
+      pull-requests: write
     name: Publish to Cloudflare Pages
     steps:
       - name: Checkout
@@ -28,11 +29,71 @@ jobs:
           ./build-site.sh
 
       - name: Publish to Cloudflare Pages
+        id: cloudflare-deploy
         uses: cloudflare/pages-action@v1
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           projectName: idpbuilder
           directory: public
-          # Optional: Enable this to create deployment on pull requests
+          # Note: gitHubToken is not needed here as we post a custom comment below
           # gitHubToken: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Post preview comment
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const deploymentUrl = '${{ steps.cloudflare-deploy.outputs.url }}';
+            const environment = '${{ steps.cloudflare-deploy.outputs.environment }}';
+            const commitSha = context.sha.substring(0, 7);
+            
+            // Validate that we have a deployment URL and it's not the unresolved expression
+            if (!deploymentUrl || deploymentUrl === '' || deploymentUrl.includes('steps.cloudflare-deploy.outputs')) {
+              core.setFailed('Deployment URL is not available from Cloudflare Pages action');
+              return;
+            }
+            
+            // Unique identifier for our comment to avoid conflicts with other bots
+            const commentIdentifier = '<!-- cloudflare-pages-preview-comment -->';
+            
+            const commentBody = `${commentIdentifier}
+            ## 📄 Documentation Preview
+            
+            The documentation site has been deployed to Cloudflare Pages.
+            
+            **Environment:** ${environment}
+            **Commit:** ${commitSha}
+            
+            ---
+            
+            **🔗 [View Preview Deployment](${deploymentUrl})**`;
+            
+            // Find existing preview comment by looking for our unique identifier
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            
+            const botComment = comments.find(comment => 
+              comment.body.includes(commentIdentifier)
+            );
+            
+            if (botComment) {
+              // Update existing comment
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: commentBody
+              });
+            } else {
+              // Create new comment
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: commentBody
+              });
+            }
