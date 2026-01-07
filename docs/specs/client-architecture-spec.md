@@ -93,6 +93,126 @@ This design ensures:
 - Clean dependency injection pattern
 - Components can be tested independently with mock kubeconfigs
 
+### Controller Installation and CRD Management
+
+A critical aspect of the architecture is how controllers for provider resources (GiteaProvider, NginxGateway, ArgoCDProvider, etc.) are installed before their CRs are created.
+
+**Infrastructure Manager Responsibilities:**
+
+The Infrastructure Manager installs core IDP Builder controllers during cluster provisioning:
+
+```go
+type InfraConfig struct {
+    KubernetesVersion string
+    InstallControllers bool  // Default: true for local clusters
+    ControllerVersion string  // Default: "latest"
+}
+
+// During Provision()
+if config.InstallControllers {
+    // Install CRDs and controllers
+    err := installIDPBuilderControllers(ctx, kubeClient, config.ControllerVersion)
+    // This installs:
+    // - GiteaProvider CRD + controller
+    // - NginxGateway CRD + controller
+    // - ArgoCDProvider CRD + controller
+    // - Platform CRD + controller
+    // - PlatformInstallation CRD + controller
+}
+```
+
+**Helm-Packaged Flavors:**
+
+For Helm charts, controller installation is declared as a dependency:
+
+```yaml
+# Chart.yaml
+apiVersion: v2
+name: idpbuilder-basic-dev
+version: 1.0.0
+
+dependencies:
+  # Core IDP Builder controllers (installs CRDs + controllers)
+  - name: idpbuilder-controllers
+    version: "^0.5.0"
+    repository: "https://cnoe-io.github.io/idpbuilder"
+    
+  # Provider-specific controllers (optional, if not included in core)
+  - name: nginx-ingress-controller
+    version: "4.8.0"
+    repository: "https://kubernetes.github.io/ingress-nginx"
+    condition: gateway.installController
+```
+
+Helm automatically installs dependencies before the main chart, ensuring controllers are available before provider CRs are created.
+
+**Kustomize-Packaged Flavors:**
+
+For Kustomize, controller installation uses resource ordering or ArgoCD sync waves:
+
+```yaml
+# flavors/basic-dev/kustomization.yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  # Install controllers first
+  - https://github.com/cnoe-io/idpbuilder/releases/v0.5.0/download/controllers.yaml
+  
+  # Then provider CRs (will wait for CRDs to be available)
+  - gitea-provider.yaml
+  - nginx-gateway.yaml
+  - argocd-provider.yaml
+  - platform.yaml
+```
+
+With ArgoCD sync waves for explicit ordering:
+
+```yaml
+# controllers.yaml
+metadata:
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"  # Install controllers first
+
+---
+# gitea-provider.yaml
+metadata:
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"  # Install providers after controllers
+```
+
+**Controller Discovery and Validation:**
+
+The Flavor Manager validates that required controllers are available before creating CRs:
+
+```go
+type FlavorManager interface {
+    // ValidateFlavor checks that required controllers are installed
+    ValidateFlavor(ctx context.Context, flavor *Flavor, kubeClient client.Client) error
+}
+
+func (m *Manager) ValidateFlavor(ctx context.Context, flavor *Flavor, kubeClient client.Client) error {
+    // Check that required CRDs exist
+    for _, component := range flavor.Spec.Components {
+        crdName := component.Kind + "s.idpbuilder.cnoe.io"
+        if !crdExists(ctx, kubeClient, crdName) {
+            return fmt.Errorf("required CRD %s not found, install controllers first", crdName)
+        }
+    }
+    return nil
+}
+```
+
+**Installation Sequence:**
+
+1. **Infrastructure Manager** provisions cluster and installs core controllers (for local/managed clusters)
+2. **Flavor packaging** (Helm/Kustomize) declares additional controller dependencies
+3. **Package manager** (Helm/ArgoCD) installs controllers before provider CRs
+4. **Flavor Manager** validates controllers are available
+5. **CR Generator** creates provider CRs referencing the now-available controller types
+
+This ensures controllers are always installed before the CRs that depend on them.
+
 ### Component Responsibilities
 
 #### 1. Infrastructure Manager
@@ -146,14 +266,19 @@ infraMgr := infrastructure.NewManager(
     infrastructure.WithClusterName("my-idp"),
 )
 
-// Provision infrastructure
+// Provision infrastructure with controller installation
 result, err := infraMgr.Provision(ctx, infrastructure.Config{
     KubernetesVersion: "1.28.0",
+    InstallControllers: true,  // Install IDP Builder controllers
+    ControllerVersion: "v0.5.0",
     Networking: infrastructure.NetworkConfig{
         ServiceCIDR: "10.96.0.0/16",
         PodCIDR:     "10.244.0.0/16",
     },
 })
+
+// Controllers are now installed and ready
+// CRDs available: GiteaProvider, NginxGateway, ArgoCDProvider, Platform
 ```
 
 #### 2. Flavor Manager
@@ -162,10 +287,11 @@ result, err := infraMgr.Provision(ctx, infrastructure.Config{
 
 **Responsibilities**:
 - Load flavor definitions from files or embedded resources
-- Validate flavor configurations
+- Validate flavor configurations and controller availability
 - Generate appropriate Custom Resources for the selected flavor
 - Support flavor composition (extending base flavors)
 - Handle flavor-specific configuration overrides
+- Verify required CRDs are installed before generating provider CRs
 
 **Flavor Definition Format**:
 ```yaml
@@ -225,8 +351,8 @@ type FlavorManager interface {
     // GenerateResources generates CRs for the given flavor
     GenerateResources(flavor *Flavor, overrides map[string]interface{}) ([]client.Object, error)
     
-    // ValidateFlavor validates a flavor definition
-    ValidateFlavor(flavor *Flavor) error
+    // ValidateFlavor validates a flavor definition and checks controller availability
+    ValidateFlavor(ctx context.Context, flavor *Flavor, kubeClient client.Client) error
 }
 
 type FlavorRegistry interface {
@@ -289,7 +415,14 @@ flavorMgr := flavor.NewManager(
 
 flavor, err := flavorMgr.GetFlavor("basic-dev")
 
-// 4. Generate resources with overrides
+// 4. Validate that required controllers are installed
+err = flavorMgr.ValidateFlavor(ctx, flavor, kubeClient)
+if err != nil {
+    // Controllers not available, need to install them first
+    return fmt.Errorf("flavor validation failed: %w", err)
+}
+
+// 5. Generate resources with overrides
 overrides := map[string]interface{}{
     "platform.domain": "my-company.dev",
     "gitProvider.config.adminPassword": "secret123",
@@ -297,7 +430,7 @@ overrides := map[string]interface{}{
 
 resources, err := flavorMgr.GenerateResources(flavor, overrides)
 
-// 5. Apply to cluster using kubeconfig from infrastructure manager
+// 6. Apply to cluster using kubeconfig from infrastructure manager
 for _, resource := range resources {
     err := kubeClient.Create(ctx, resource)
 }
