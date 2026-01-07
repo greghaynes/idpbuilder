@@ -639,7 +639,10 @@ func (r *Reconciler) reconcileArgoCDSourceFromRemote(ctx context.Context, resour
 				InternalGitURL:   providerInfo.internalURL,
 				OrganizationName: providerInfo.organizationName,
 			},
-			SecretRef: resource.Spec.GitServerAuthSecretRef,
+			SecretRef: v1alpha1.SecretReference{
+				Name:      providerInfo.secretName,
+				Namespace: providerInfo.secretNamespace,
+			},
 		}
 
 		return nil
@@ -721,7 +724,10 @@ func (r *Reconciler) reconcileArgoCDSourceFromLocal(ctx context.Context, resourc
 				InternalGitURL:   providerInfo.internalURL,
 				OrganizationName: providerInfo.organizationName,
 			},
-			SecretRef: resource.Spec.GitServerAuthSecretRef,
+			SecretRef: v1alpha1.SecretReference{
+				Name:      providerInfo.secretName,
+				Namespace: providerInfo.secretNamespace,
+			},
 		}
 
 		return nil
