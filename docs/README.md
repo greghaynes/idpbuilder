@@ -7,8 +7,11 @@ This directory contains all documentation for the IDP Builder project, organized
 ### [Technical Specifications](./specs/)
 Technical specifications and architectural design documents that define how the system should work.
 
+- [Client Architecture Specification](./specs/client-architecture-spec.md) - New unified client design replacing localbuilder and current CLI
 - [Controller-Based Architecture Specification](./specs/controller-architecture-spec.md) - Comprehensive spec for the v2 controller-based architecture
+- [Resource Creation Sequencing and State Transitions](./specs/resource-creation-sequencing.md) - Technical spec for resource tracking and sequencing
 - [Pluggable and Configurable Packaging Proposal](./specs/pluggable-packages.md) - Design for flexible package installation
+- [Hyperscaler Provider Implementation Specification](./specs/hyperscaler-provider-spec.md) - Cloud provider integration design
 
 ### [Implementation Documentation](./implementation/)
 Implementation details, developer documentation, and testing information.

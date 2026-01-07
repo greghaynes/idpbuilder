@@ -4,40 +4,6 @@ This directory contains implementation details, developer documentation, and tes
 
 ## Documents
 
-### [Resource Creation Sequencing and State Transitions](./resource-creation-sequencing.md)
-
-**NEW** - Comprehensive implementation guide for resource creation sequencing and state transitions.
-
-**Quick Reference:**
-- Resource creation sequence (CLI → Platform → Providers)
-- State machines and transitions for all resources
-- Controller watching patterns and dependencies
-- Detailed sequence diagrams showing actual flows
-- Status condition management patterns
-- Error handling and retry logic
-- Duck-typing for provider independence
-- Client resource tracking implementation (Platform status monitoring and CLI display)
-
-**Key Topics:**
-1. **CLI Minimal Logic**: CLI creates CRs in simple order; controllers handle dependencies
-2. **Controller-Driven Sequencing**: Controllers watch status of other resources
-3. **Owner Reference Pattern**: Primary mechanism for coordinating Platform and Providers
-4. **Status Aggregation**: Platform monitors all provider statuses
-5. **Cross-Provider Dependencies**: Providers check each other when needed
-6. **Configuration Discovery**: Providers read Platform spec for config
-7. **Client Resource Tracking**: How Platform tracks provider Ready conditions and CLI displays status to users
-
-**Use Cases:**
-- Understanding how resources are created and sequenced
-- Learning controller coordination patterns
-- Debugging state transition issues
-- Implementing new providers
-- Understanding the controller-based architecture
-
-**See also:**
-- [Controller Architecture Spec](../specs/controller-architecture-spec.md) - High-level design
-- [Architecture Transition Guide](./architecture-transition.md) - Migration overview
-
 ### [Next Steps to Remove Localbuild Controller](./next-steps-remove-localbuild.md)
 
 **NEW** - Comprehensive guide for completing the migration to the controller-based architecture (v1alpha2).
@@ -198,6 +164,8 @@ This documentation helps:
 
 ## Related Documentation
 
-- [Technical Specifications](../specs/) - Architectural design documents
+- [Technical Specifications](../specs/) - Architectural design documents, including:
+  - [Resource Creation Sequencing](../specs/resource-creation-sequencing.md) - Moved to specs directory as a technical specification
+  - [Client Architecture Specification](../specs/client-architecture-spec.md) - New unified client design
 - [User Documentation](../user/) - User-facing guides
 - [Scripts README](../../scripts/README.md) - Development utility scripts
