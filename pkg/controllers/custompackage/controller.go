@@ -294,6 +294,14 @@ func (r *Reconciler) discoverGitProviderFromPlatform(ctx context.Context, namesp
 		return nil, fmt.Errorf("git provider %s is not ready", gitProviderRef.Name)
 	}
 
+	// Validate required fields
+	if status.Endpoint == "" || status.InternalEndpoint == "" {
+		return nil, fmt.Errorf("git provider %s is missing required endpoint information", gitProviderRef.Name)
+	}
+	if status.CredentialsSecretRef.Name == "" || status.CredentialsSecretRef.Namespace == "" {
+		return nil, fmt.Errorf("git provider %s is missing credentials secret reference", gitProviderRef.Name)
+	}
+
 	// Extract organization name - default to GiteaAdminUserName for backward compatibility
 	organizationName := v1alpha1.GiteaAdminUserName
 
