@@ -86,6 +86,13 @@ You can then run idpbuilder with the create argument to spin up your CNOE IDP:
 
 For more detailed information, checkout our [documentation](https://cnoe.io/docs/idpbuilder) on getting started with idpbuilder.
 
+## Documentation
+
+- **[Why IDP Builder?](./docs/why-idpbuilder.md)** - Understand the value proposition and how IDP Builder solves platform challenges
+- **[Architecture Overview](./docs/architecture.md)** - High-level technical architecture including duck-typed CRDs and pluggable capabilities
+- **[Technical Specifications](./docs/specs/)** - Detailed design documents for the v2 controller-based architecture
+- **[Examples](./examples/README.md)** - Example configurations and usage patterns
+
 ## Community
 
 - If you have questions or concerns about this tool, please feel free to reach out to us on the [CNCF Slack Channel](https://cloud-native.slack.com/archives/C05TN9WFN5S).

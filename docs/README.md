@@ -1,16 +1,24 @@
 # IDP Builder Documentation
 
-This directory contains all documentation for the IDP Builder project, organized into three main categories:
+This directory contains all documentation for the IDP Builder project, organized into several categories:
+
+## 🌟 Start Here
+
+### [Why IDP Builder?](./why-idpbuilder.md)
+**New to IDP Builder?** Start here to understand the value proposition, use cases, and how IDP Builder solves the challenges of building Internal Developer Platforms.
+
+### [Architecture Overview](./architecture.md)
+**Want to understand how it works?** Read this high-level technical architecture document that explains the pluggable capabilities via duck-typed CRDs and the provider pattern.
 
 ## 📋 Documentation Structure
 
 ### [Technical Specifications](./specs/)
 Technical specifications and architectural design documents that define how the system should work.
 
-- [Client Architecture Specification](./specs/client-architecture-spec.md) - New unified client design replacing localbuilder and current CLI
 - [Controller-Based Architecture Specification](./specs/controller-architecture-spec.md) - Comprehensive spec for the v2 controller-based architecture
-- [Resource Creation Sequencing and State Transitions](./specs/resource-creation-sequencing.md) - Technical spec for resource tracking and sequencing
+- [Client Architecture Specification](./specs/client-architecture-spec.md) - New unified client design replacing localbuilder and current CLI
 - [Pluggable and Configurable Packaging Proposal](./specs/pluggable-packages.md) - Design for flexible package installation
+- [Resource Creation Sequencing and State Transitions](./specs/resource-creation-sequencing.md) - Technical spec for resource tracking and sequencing
 - [Hyperscaler Provider Implementation Specification](./specs/hyperscaler-provider-spec.md) - Cloud provider integration design
 
 ### [Implementation Documentation](./implementation/)
@@ -33,3 +41,4 @@ For getting started with IDP Builder, see the main [README.md](../README.md) in 
 
 - [Examples](../examples/) - Example configurations and usage patterns
 - [Scripts](../scripts/) - Utility scripts for development and testing
+- [API Reference](./api/) - Complete API documentation for Custom Resource Definitions
