@@ -4,9 +4,12 @@ import (
 	"context"
 	"testing"
 
+	argov1alpha1 "github.com/cnoe-io/argocd-api/api/argo/application/v1alpha1"
+	"github.com/cnoe-io/idpbuilder/api/v1alpha1"
 	"github.com/cnoe-io/idpbuilder/api/v1alpha2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -387,6 +390,217 @@ func TestPlatformReconciler_aggregateGateways(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, tt.expectReady, ready)
 			assert.Len(t, summaries, tt.expectSummary)
+		})
+	}
+}
+
+func TestPlatformReconciler_createBootstrapResources(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = v1alpha2.AddToScheme(scheme)
+	_ = v1alpha1.AddToScheme(scheme)
+	_ = argov1alpha1.AddToScheme(scheme)
+
+	tests := []struct {
+		name          string
+		platform      *v1alpha2.Platform
+		providers     []client.Object
+		expectError   bool
+		validateRepos func(*testing.T, client.Client, *v1alpha2.Platform)
+	}{
+		{
+			name: "creates bootstrap resources successfully",
+			platform: &v1alpha2.Platform{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-platform",
+					Namespace: "default",
+					UID:       "platform-uid-123",
+				},
+				Spec: v1alpha2.PlatformSpec{
+					Domain: "test.local",
+					Components: v1alpha2.PlatformComponents{
+						GitProviders: []v1alpha2.ProviderReference{
+							{
+								Name:      "test-gitea",
+								Kind:      "GiteaProvider",
+								Namespace: "gitea",
+							},
+						},
+					},
+				},
+			},
+			providers: []client.Object{
+				&v1alpha2.GiteaProvider{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-gitea",
+						Namespace: "gitea",
+					},
+					Status: v1alpha2.GiteaProviderStatus{
+						Endpoint:         "http://gitea.test.local",
+						InternalEndpoint: "http://gitea-http.gitea.svc.cluster.local:3000",
+						CredentialsSecretRef: &v1alpha2.SecretReference{
+							Name:      "gitea-credential",
+							Namespace: "gitea",
+						},
+						Conditions: []metav1.Condition{
+							{
+								Type:   "Ready",
+								Status: metav1.ConditionTrue,
+							},
+						},
+					},
+				},
+			},
+			expectError: false,
+			validateRepos: func(t *testing.T, c client.Client, p *v1alpha2.Platform) {
+				// Check that GitRepository was created
+				repo := &v1alpha1.GitRepository{}
+				err := c.Get(context.Background(), types.NamespacedName{
+					Name:      "argocd",
+					Namespace: "idpbuilder-test",
+				}, repo)
+				require.NoError(t, err)
+				assert.Equal(t, "embedded", repo.Spec.Source.Type)
+				assert.Equal(t, "argocd", repo.Spec.Source.EmbeddedAppName)
+				assert.Equal(t, "http://gitea.test.local", repo.Spec.Provider.GitURL)
+				assert.Equal(t, "http://gitea-http.gitea.svc.cluster.local:3000", repo.Spec.Provider.InternalGitURL)
+
+				// Check that platform annotation was set
+				updatedPlatform := &v1alpha2.Platform{}
+				err = c.Get(context.Background(), types.NamespacedName{
+					Name:      p.Name,
+					Namespace: p.Namespace,
+				}, updatedPlatform)
+				require.NoError(t, err)
+				assert.Equal(t, "true", updatedPlatform.Annotations[bootstrapReposCreatedFlag])
+			},
+		},
+		{
+			name: "skips creation when already created",
+			platform: &v1alpha2.Platform{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-platform",
+					Namespace: "default",
+					UID:       "platform-uid-456",
+					Annotations: map[string]string{
+						bootstrapReposCreatedFlag: "true",
+					},
+				},
+				Spec: v1alpha2.PlatformSpec{
+					Domain: "test.local",
+					Components: v1alpha2.PlatformComponents{
+						GitProviders: []v1alpha2.ProviderReference{
+							{
+								Name:      "test-gitea",
+								Kind:      "GiteaProvider",
+								Namespace: "gitea",
+							},
+						},
+					},
+				},
+			},
+			providers:   []client.Object{},
+			expectError: false,
+			validateRepos: func(t *testing.T, c client.Client, p *v1alpha2.Platform) {
+				// Should not create any repositories
+				repo := &v1alpha1.GitRepository{}
+				err := c.Get(context.Background(), types.NamespacedName{
+					Name:      "argocd",
+					Namespace: "idpbuilder-test",
+				}, repo)
+				assert.True(t, errors.IsNotFound(err))
+			},
+		},
+		{
+			name: "returns error when no git providers",
+			platform: &v1alpha2.Platform{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-platform",
+					Namespace: "default",
+				},
+				Spec: v1alpha2.PlatformSpec{
+					Domain:     "test.local",
+					Components: v1alpha2.PlatformComponents{},
+				},
+			},
+			providers:   []client.Object{},
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(tt.platform).
+				WithObjects(tt.providers...).
+				Build()
+
+			reconciler := &PlatformReconciler{
+				Client: fakeClient,
+				Scheme: scheme,
+			}
+
+			err := reconciler.createBootstrapResources(context.Background(), tt.platform)
+
+			if tt.expectError {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				if tt.validateRepos != nil {
+					tt.validateRepos(t, fakeClient, tt.platform)
+				}
+			}
+		})
+	}
+}
+
+func TestPlatformReconciler_validateGitURL(t *testing.T) {
+	tests := []struct {
+		name        string
+		url         string
+		fieldName   string
+		expectError bool
+	}{
+		{
+			name:        "valid http URL",
+			url:         "http://gitea.test.local",
+			fieldName:   "test",
+			expectError: false,
+		},
+		{
+			name:        "valid https URL",
+			url:         "https://gitea.test.local",
+			fieldName:   "test",
+			expectError: false,
+		},
+		{
+			name:        "empty URL",
+			url:         "",
+			fieldName:   "test",
+			expectError: true,
+		},
+		{
+			name:        "invalid protocol",
+			url:         "ftp://gitea.test.local",
+			fieldName:   "test",
+			expectError: true,
+		},
+		{
+			name:        "protocol only",
+			url:         "http://",
+			fieldName:   "test",
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateGitURL(tt.url, tt.fieldName)
+			if tt.expectError {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
 		})
 	}
 }
