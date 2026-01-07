@@ -73,6 +73,187 @@ marked.setOptions({
   renderer: renderer
 });
 
+// Common CSS styles for markdown content
+const MARKDOWN_CONTENT_STYLES = `
+        .markdown-content {
+            line-height: 1.6;
+        }
+        .markdown-content h1 {
+            border-bottom: 2px solid var(--border-color);
+            padding-bottom: 0.5rem;
+            margin-bottom: 1.5rem;
+        }
+        .markdown-content h2 {
+            margin-top: 2rem;
+            margin-bottom: 1rem;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 0.3rem;
+        }
+        .markdown-content h3 {
+            margin-top: 1.5rem;
+            margin-bottom: 0.75rem;
+        }
+        .markdown-content h4 {
+            margin-top: 1.25rem;
+            margin-bottom: 0.5rem;
+        }
+        .markdown-content pre {
+            background-color: var(--bg-alt);
+            padding: 1rem;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        .markdown-content code {
+            background-color: var(--bg-alt);
+            padding: 0.2rem 0.4rem;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+        }
+        .markdown-content pre code {
+            background-color: transparent;
+            padding: 0;
+        }
+        .markdown-content blockquote {
+            border-left: 4px solid var(--primary-color);
+            padding-left: 1rem;
+            margin-left: 0;
+            color: var(--text-muted);
+        }
+        .markdown-content table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 1rem 0;
+        }
+        .markdown-content th,
+        .markdown-content td {
+            border: 1px solid var(--border-color);
+            padding: 0.5rem;
+            text-align: left;
+        }
+        .markdown-content th {
+            background-color: var(--bg-alt);
+            font-weight: bold;
+        }
+        .markdown-content a {
+            color: var(--primary-color);
+            text-decoration: none;
+        }
+        .markdown-content a:hover {
+            text-decoration: underline;
+        }
+        .markdown-content img {
+            max-width: 100%;
+            height: auto;
+        }
+        .markdown-content ul,
+        .markdown-content ol {
+            padding-left: 2rem;
+            margin: 1rem 0;
+        }
+        .markdown-content li {
+            margin: 0.5rem 0;
+        }
+        /* Mermaid diagram styling */
+        .markdown-content .mermaid {
+            background-color: transparent;
+            padding: 1rem;
+            margin: 1.5rem 0;
+            text-align: center;
+            overflow-x: auto;
+        }
+        .markdown-content pre.mermaid {
+            background-color: var(--bg-alt);
+            border-radius: 5px;
+        }`;
+
+// Common breadcrumb styles
+const BREADCRUMB_STYLES = `
+        .breadcrumb {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            margin-bottom: 1rem;
+        }
+        .breadcrumb a {
+            color: var(--primary-color);
+            text-decoration: none;
+        }
+        .breadcrumb a:hover {
+            text-decoration: underline;
+        }`;
+
+// Sidebar-specific styles for pages with navigation
+const SIDEBAR_STYLES = `
+        .docs-container {
+            display: grid;
+            grid-template-columns: 250px 1fr;
+            gap: 2rem;
+            margin-top: 2rem;
+        }
+        .docs-sidebar {
+            position: sticky;
+            top: 80px;
+            height: fit-content;
+            max-height: calc(100vh - 80px);
+            overflow-y: auto;
+        }
+        .docs-sidebar h3 {
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            margin-top: 1.5rem;
+            margin-bottom: 0.5rem;
+            padding-left: 0.5rem;
+        }
+        .docs-sidebar h3:first-child {
+            margin-top: 0;
+        }
+        .docs-sidebar ul {
+            list-style: none;
+            padding: 0;
+        }
+        .docs-sidebar li {
+            margin-bottom: 0.5rem;
+        }
+        .docs-sidebar a {
+            text-decoration: none;
+            color: var(--text-color);
+            padding: 0.5rem;
+            display: block;
+            border-radius: 4px;
+            transition: background-color 0.3s;
+            font-size: 0.95rem;
+        }
+        .docs-sidebar a:hover,
+        .docs-sidebar a.active {
+            background-color: var(--bg-alt);
+            color: var(--primary-color);
+        }
+        .docs-content {
+            max-width: 800px;
+            width: 100%;
+        }
+        @media (max-width: 768px) {
+            .docs-container {
+                grid-template-columns: 1fr;
+            }
+            .docs-sidebar {
+                position: relative;
+                top: 0;
+                background-color: var(--bg-alt);
+                padding: 1rem;
+                border-radius: 5px;
+                margin-bottom: 1rem;
+            }
+            .docs-sidebar h3 {
+                margin-top: 0;
+            }
+            .docs-content {
+                max-width: 100%;
+                overflow-x: hidden;
+            }
+        }`;
+
 // Extract headings from markdown for navigation
 const extractHeadings = (markdown) => {
   const headings = [];
@@ -191,178 +372,9 @@ const createHtmlPageWithSidebar = (title, content, category, sidebar, relativePa
         });
     </script>
     <style>
-        .docs-container {
-            display: grid;
-            grid-template-columns: 250px 1fr;
-            gap: 2rem;
-            margin-top: 2rem;
-        }
-        .docs-sidebar {
-            position: sticky;
-            top: 80px;
-            height: fit-content;
-            max-height: calc(100vh - 80px);
-            overflow-y: auto;
-        }
-        .docs-sidebar h3 {
-            font-size: 0.9rem;
-            text-transform: uppercase;
-            color: var(--text-muted);
-            margin-top: 1.5rem;
-            margin-bottom: 0.5rem;
-            padding-left: 0.5rem;
-        }
-        .docs-sidebar h3:first-child {
-            margin-top: 0;
-        }
-        .docs-sidebar ul {
-            list-style: none;
-            padding: 0;
-        }
-        .docs-sidebar li {
-            margin-bottom: 0.5rem;
-        }
-        .docs-sidebar a {
-            text-decoration: none;
-            color: var(--text-color);
-            padding: 0.5rem;
-            display: block;
-            border-radius: 4px;
-            transition: background-color 0.3s;
-            font-size: 0.95rem;
-        }
-        .docs-sidebar a:hover,
-        .docs-sidebar a.active {
-            background-color: var(--bg-alt);
-            color: var(--primary-color);
-        }
-        .docs-content {
-            max-width: 800px;
-            width: 100%;
-        }
-        .breadcrumb {
-            font-size: 0.9rem;
-            color: var(--text-muted);
-            margin-bottom: 1rem;
-        }
-        .breadcrumb a {
-            color: var(--primary-color);
-            text-decoration: none;
-        }
-        .breadcrumb a:hover {
-            text-decoration: underline;
-        }
-        .markdown-content {
-            line-height: 1.6;
-        }
-        .markdown-content h1 {
-            border-bottom: 2px solid var(--border-color);
-            padding-bottom: 0.5rem;
-            margin-bottom: 1.5rem;
-        }
-        .markdown-content h2 {
-            margin-top: 2rem;
-            margin-bottom: 1rem;
-            border-bottom: 1px solid var(--border-color);
-            padding-bottom: 0.3rem;
-        }
-        .markdown-content h3 {
-            margin-top: 1.5rem;
-            margin-bottom: 0.75rem;
-        }
-        .markdown-content h4 {
-            margin-top: 1.25rem;
-            margin-bottom: 0.5rem;
-        }
-        .markdown-content pre {
-            background-color: var(--bg-alt);
-            padding: 1rem;
-            border-radius: 5px;
-            overflow-x: auto;
-        }
-        .markdown-content code {
-            background-color: var(--bg-alt);
-            padding: 0.2rem 0.4rem;
-            border-radius: 3px;
-            font-family: 'Courier New', monospace;
-            font-size: 0.9em;
-        }
-        .markdown-content pre code {
-            background-color: transparent;
-            padding: 0;
-        }
-        .markdown-content blockquote {
-            border-left: 4px solid var(--primary-color);
-            padding-left: 1rem;
-            margin-left: 0;
-            color: var(--text-muted);
-        }
-        .markdown-content table {
-            border-collapse: collapse;
-            width: 100%;
-            margin: 1rem 0;
-        }
-        .markdown-content th,
-        .markdown-content td {
-            border: 1px solid var(--border-color);
-            padding: 0.5rem;
-            text-align: left;
-        }
-        .markdown-content th {
-            background-color: var(--bg-alt);
-            font-weight: bold;
-        }
-        .markdown-content a {
-            color: var(--primary-color);
-            text-decoration: none;
-        }
-        .markdown-content a:hover {
-            text-decoration: underline;
-        }
-        .markdown-content img {
-            max-width: 100%;
-            height: auto;
-        }
-        .markdown-content ul,
-        .markdown-content ol {
-            padding-left: 2rem;
-            margin: 1rem 0;
-        }
-        .markdown-content li {
-            margin: 0.5rem 0;
-        }
-        /* Mermaid diagram styling */
-        .markdown-content .mermaid {
-            background-color: transparent;
-            padding: 1rem;
-            margin: 1.5rem 0;
-            text-align: center;
-            overflow-x: auto;
-        }
-        .markdown-content pre.mermaid {
-            background-color: var(--bg-alt);
-            border-radius: 5px;
-        }
-        @media (max-width: 768px) {
-            .docs-container {
-                grid-template-columns: 1fr;
-            }
-            .docs-sidebar {
-                position: relative;
-                top: 0;
-                background-color: var(--bg-alt);
-                padding: 1rem;
-                border-radius: 5px;
-                margin-bottom: 1rem;
-            }
-            .docs-sidebar h3 {
-                margin-top: 0;
-            }
-            .docs-content {
-                max-width: 100%;
-                overflow-x: hidden;
-            }
-        }
+${SIDEBAR_STYLES}
+${BREADCRUMB_STYLES}
+${MARKDOWN_CONTENT_STYLES}
     </style>
     <script src="${relativePath}../../js/theme.js"></script>
 </head>
@@ -465,105 +477,8 @@ const createHtmlPage = (title, content, category, relativePath = '') => {
             margin: 2rem auto;
             padding: 0 1rem;
         }
-        .breadcrumb {
-            font-size: 0.9rem;
-            color: var(--text-muted);
-            margin-bottom: 1rem;
-        }
-        .breadcrumb a {
-            color: var(--primary-color);
-            text-decoration: none;
-        }
-        .breadcrumb a:hover {
-            text-decoration: underline;
-        }
-        .markdown-content {
-            line-height: 1.6;
-        }
-        .markdown-content h1 {
-            border-bottom: 2px solid var(--border-color);
-            padding-bottom: 0.5rem;
-            margin-bottom: 1.5rem;
-        }
-        .markdown-content h2 {
-            margin-top: 2rem;
-            margin-bottom: 1rem;
-            border-bottom: 1px solid var(--border-color);
-            padding-bottom: 0.3rem;
-        }
-        .markdown-content h3 {
-            margin-top: 1.5rem;
-            margin-bottom: 0.75rem;
-        }
-        .markdown-content pre {
-            background-color: var(--bg-alt);
-            padding: 1rem;
-            border-radius: 5px;
-            overflow-x: auto;
-        }
-        .markdown-content code {
-            background-color: var(--bg-alt);
-            padding: 0.2rem 0.4rem;
-            border-radius: 3px;
-            font-family: 'Courier New', monospace;
-            font-size: 0.9em;
-        }
-        .markdown-content pre code {
-            background-color: transparent;
-            padding: 0;
-        }
-        .markdown-content blockquote {
-            border-left: 4px solid var(--primary-color);
-            padding-left: 1rem;
-            margin-left: 0;
-            color: var(--text-muted);
-        }
-        .markdown-content table {
-            border-collapse: collapse;
-            width: 100%;
-            margin: 1rem 0;
-        }
-        .markdown-content th,
-        .markdown-content td {
-            border: 1px solid var(--border-color);
-            padding: 0.5rem;
-            text-align: left;
-        }
-        .markdown-content th {
-            background-color: var(--bg-alt);
-            font-weight: bold;
-        }
-        .markdown-content a {
-            color: var(--primary-color);
-            text-decoration: none;
-        }
-        .markdown-content a:hover {
-            text-decoration: underline;
-        }
-        .markdown-content img {
-            max-width: 100%;
-            height: auto;
-        }
-        .markdown-content ul,
-        .markdown-content ol {
-            padding-left: 2rem;
-            margin: 1rem 0;
-        }
-        .markdown-content li {
-            margin: 0.5rem 0;
-        }
-        /* Mermaid diagram styling */
-        .markdown-content .mermaid {
-            background-color: transparent;
-            padding: 1rem;
-            margin: 1.5rem 0;
-            text-align: center;
-            overflow-x: auto;
-        }
-        .markdown-content pre.mermaid {
-            background-color: var(--bg-alt);
-            border-radius: 5px;
-        }
+${BREADCRUMB_STYLES}
+${MARKDOWN_CONTENT_STYLES}
     </style>
     <script src="${relativePath}../../js/theme.js"></script>
 </head>
