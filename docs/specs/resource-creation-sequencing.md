@@ -1272,5 +1272,5 @@ This design ensures that the CLI remains simple and the controllers are autonomo
 ## Related Documentation
 
 - [Controller Architecture Spec](./controller-architecture-spec.md) - High-level architecture design
-- [Architecture Transition Guide](../implementation/architecture-transition.md) - Migration from v1alpha1 to v1alpha2
-- [Next Steps to Remove Localbuild](../implementation/next-steps-remove-localbuild.md) - Implementation roadmap
+- [Implementation Roadmap](../implementation/implementation-roadmap.md) - Current implementation status and remaining work
+- [Archived: Architecture Transition Guide](../implementation/archived/architecture-transition.md) - Historical migration planning (archived)

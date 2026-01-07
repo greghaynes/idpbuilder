@@ -16,8 +16,11 @@ Technical specifications and architectural design documents that define how the 
 ### [Implementation Documentation](./implementation/)
 Implementation details, developer documentation, and testing information.
 
+- [Implementation Roadmap](./implementation/implementation-roadmap.md) - **CURRENT** - Remaining work for controller-based architecture migration
 - [Test Duration Summary](./implementation/test-duration-summary.md) - Summary of test execution times
 - [Test Timing Analysis](./implementation/test-timing-analysis.md) - Detailed test performance analysis
+- [Test Coverage Improvement Plan](./implementation/test-coverage-improvement-plan.md) - Plan for improving test coverage
+- [Archived Implementation Docs](./implementation/archived/) - Historical implementation planning documents
 
 ### [User Documentation](./user/)
 User-facing guides and documentation for using IDP Builder.

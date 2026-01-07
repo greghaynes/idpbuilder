@@ -33,7 +33,7 @@ A comprehensive specification for a new unified client architecture that replace
 **See also:**
 - [Controller Architecture Spec](./controller-architecture-spec.md) - Controller design that client orchestrates
 - [Resource Creation Sequencing](./resource-creation-sequencing.md) - How resources are tracked and sequenced
-- [Next Steps to Remove Localbuild](../implementation/next-steps-remove-localbuild.md) - Current migration plan
+- [Implementation Roadmap](../implementation/implementation-roadmap.md) - Current implementation status and remaining work
 
 ### [Resource Creation Sequencing and State Transitions](./resource-creation-sequencing.md)
 
@@ -62,7 +62,7 @@ Comprehensive technical specification for resource creation sequencing and state
 
 **See also:**
 - [Controller Architecture Spec](./controller-architecture-spec.md) - High-level architecture design
-- [Next Steps to Remove Localbuild](../implementation/next-steps-remove-localbuild.md) - Implementation roadmap
+- [Implementation Roadmap](../implementation/implementation-roadmap.md) - Current implementation status and remaining work
 
 ### [Controller-Based Architecture Specification](./controller-architecture-spec.md)
 
