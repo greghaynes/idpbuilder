@@ -243,32 +243,28 @@ type FlavorRegistry interface {
 
 **Built-in Flavors**:
 
-1. **`basic-dev`**: Minimal setup for local development
-   - Gitea (Git provider)
-   - Nginx (Gateway)
-   - ArgoCD (GitOps)
-   
-2. **`full-dev`**: Complete development environment
-   - All basic-dev components
-   - Backstage (Developer portal)
-   - Crossplane (Infrastructure as Code)
-   - Vault (Secrets management)
-   
-3. **`production-aws`**: Production-ready on AWS EKS
-   - GitHub provider (using GitHub App)
-   - AWS ALB Ingress Controller
-   - ArgoCD with SSO
-   - External Secrets Operator
-   
-4. **`production-azure`**: Production-ready on Azure AKS
-   - Azure DevOps Repos
-   - Azure Application Gateway
-   - Flux with Azure integration
-   
-5. **`minimal`**: Absolute minimum for testing
-   - Gitea only
+Built-in flavors are included with IDP Builder and do not depend on external cloud providers or third-party proprietary software:
+
+1. **`minimal`**: Absolute minimum for testing
+   - Gitea only (Git provider)
    - No gateway
    - No GitOps provider
+   
+2. **`basic-dev`**: Standard local development setup
+   - Gitea (Git provider)
+   - Nginx Ingress (Gateway)
+   - ArgoCD (GitOps)
+
+**Example Flavors**:
+
+Additional flavors are provided as examples and can be customized for specific environments. These may depend on cloud providers or third-party services:
+
+- **`full-dev`**: Extended development environment with Backstage, Crossplane, and Vault
+- **`production-aws`**: AWS EKS optimized with GitHub, ALB, and production-grade configurations
+- **`production-azure`**: Azure AKS optimized with Azure DevOps and Application Gateway
+- **`production-gcp`**: GCP GKE optimized with Cloud Source Repos and GKE Gateway
+
+See [Appendix B: Example Flavors](#appendix-b-example-flavors) for complete definitions.
 
 **Example Usage**:
 ```go
@@ -416,17 +412,20 @@ helm install my-idp oci://ghcr.io/cnoe-io/flavors/idpbuilder-basic-dev --version
 
 **1. Official Flavor Repository**
 
-Central catalog of curated flavors:
+Central catalog of example flavors and community contributions:
 
 ```
 https://github.com/cnoe-io/idpbuilder-flavors/
-├── basic-dev/
-├── full-dev/
-├── production-aws/
-├── production-azure/
-├── production-gcp/
-└── index.yaml          # Helm repository index
+├── minimal/             # Built-in (also embedded in CLI)
+├── basic-dev/           # Built-in (also embedded in CLI)
+├── full-dev/            # Example flavor
+├── production-aws/      # Example flavor
+├── production-azure/    # Example flavor
+├── production-gcp/      # Example flavor
+└── index.yaml           # Helm repository index
 ```
+
+Note: Built-in flavors (minimal, basic-dev) are embedded in the IDP Builder CLI and don't require external repositories for basic usage.
 
 **2. Helm Chart Repository**
 
@@ -790,19 +789,42 @@ EOF
 # index.yaml
 apiVersion: v1
 entries:
+  idpbuilder-minimal:
+    - name: idpbuilder-minimal
+      version: 1.0.0
+      description: Minimal setup with just Git provider (built-in)
+      urls:
+        - https://cnoe-io.github.io/idpbuilder-flavors/minimal-1.0.0.tgz
+      annotations:
+        type: built-in
+        
   idpbuilder-basic-dev:
     - name: idpbuilder-basic-dev
       version: 1.0.0
-      description: Basic development environment
+      description: Standard local development setup (built-in)
       urls:
         - https://cnoe-io.github.io/idpbuilder-flavors/basic-dev-1.0.0.tgz
+      annotations:
+        type: built-in
       
   idpbuilder-full-dev:
     - name: idpbuilder-full-dev
       version: 1.0.0
-      description: Full development environment with additional tools
+      description: Extended development environment (example)
       urls:
         - https://cnoe-io.github.io/idpbuilder-flavors/full-dev-1.0.0.tgz
+      annotations:
+        type: example
+        
+  idpbuilder-production-aws:
+    - name: idpbuilder-production-aws
+      version: 1.0.0
+      description: Production-ready on AWS EKS (example)
+      urls:
+        - https://cnoe-io.github.io/idpbuilder-flavors/production-aws-1.0.0.tgz
+      annotations:
+        type: example
+        cloud: aws
 ```
 
 **Flavor Catalog API**
@@ -991,10 +1013,13 @@ idpbuilder create --name my-idp --watch
 idpbuilder get flavors
 # Output:
 # NAME            DESCRIPTION                                    COMPONENTS
-# basic-dev       Basic development environment                  gitea, nginx, argocd
-# full-dev        Complete development environment               gitea, nginx, argocd, backstage, crossplane
-# production-aws  Production-ready on AWS EKS                    github, alb, argocd
-# minimal         Minimal setup for testing                      gitea
+# NAME            DESCRIPTION                                    COMPONENTS                    TYPE
+# minimal         Minimal setup for testing                      gitea                         built-in
+# basic-dev       Standard local development setup               gitea, nginx, argocd          built-in
+# full-dev        Extended development environment               gitea, nginx, argocd, +3      example
+# production-aws  Production-ready on AWS EKS                    github, alb, argocd           example
+# production-azure Production-ready on Azure AKS                 azurerepos, appgw, flux       example
+# production-gcp  Production-ready on GCP GKE                    cloudrepos, gke-gw, argocd    example
 ```
 
 **Get platform status**:
@@ -1057,7 +1082,8 @@ idpbuilder delete --name my-idp --keep-infra
 - [ ] `pkg/client/flavor` package
 - [ ] Flavor CRD and types
 - [ ] `FlavorManager` implementation
-- [ ] Built-in flavors (basic-dev, full-dev, minimal)
+- [ ] Built-in flavors (minimal, basic-dev)
+- [ ] Example flavors (full-dev, production-aws, production-azure, production-gcp)
 - [ ] CR generator with override support
 - [ ] Flavor validation logic
 - [ ] Unit tests for flavor processing
@@ -1359,7 +1385,9 @@ spec:
 
 ## Appendix B: Example Flavors
 
-### Minimal Flavor
+This appendix provides complete flavor definitions. The first two (minimal and basic-dev) are built-in flavors, while the others are examples that may require additional dependencies or cloud provider services.
+
+### Minimal Flavor (Built-in)
 ```yaml
 apiVersion: idpbuilder.cnoe.io/v1alpha1
 kind: Flavor
@@ -1369,6 +1397,7 @@ metadata:
   labels:
     environment: development
     complexity: minimal
+    type: built-in
 spec:
   components:
     gitProvider:
@@ -1382,16 +1411,59 @@ spec:
       enabled: false
 ```
 
-### Full Development Flavor
+### Basic Development Flavor (Built-in)
+```yaml
+apiVersion: idpbuilder.cnoe.io/v1alpha1
+kind: Flavor
+metadata:
+  name: basic-dev
+  description: Standard local development setup
+  labels:
+    environment: development
+    complexity: basic
+    type: built-in
+spec:
+  components:
+    gitProvider:
+      kind: GiteaProvider
+      version: "1.21.0"
+      config:
+        adminAutoGenerate: true
+        
+    gateway:
+      kind: NginxGateway
+      version: "1.13.0"
+      config:
+        ingressClass: nginx
+        
+    gitOpsProvider:
+      kind: ArgoCDProvider
+      version: "v2.12.0"
+      config:
+        adminAutoGenerate: true
+        ssoEnabled: false
+        
+  platform:
+    domain: "cnoe.localtest.me"
+    tls:
+      enabled: true
+      selfSigned: true
+```
+
+### Full Development Flavor (Example)
+
+This flavor extends basic-dev with additional development tools. May require additional dependencies.
+
 ```yaml
 apiVersion: idpbuilder.cnoe.io/v1alpha1
 kind: Flavor
 metadata:
   name: full-dev
-  description: Complete development environment
+  description: Extended development environment with additional tools
   labels:
     environment: development
     complexity: full
+    type: example
 spec:
   extends: basic-dev
   
@@ -1412,7 +1484,10 @@ spec:
         unsealed: true
 ```
 
-### Production AWS Flavor
+### Production AWS Flavor (Example)
+
+This flavor demonstrates AWS-specific integrations and requires AWS EKS and related services.
+
 ```yaml
 apiVersion: idpbuilder.cnoe.io/v1alpha1
 kind: Flavor
@@ -1422,6 +1497,7 @@ metadata:
   labels:
     environment: production
     cloud: aws
+    type: example
 spec:
   components:
     gitProvider:
