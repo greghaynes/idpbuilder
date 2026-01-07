@@ -105,8 +105,15 @@ if [ -d "$DOCS_SOURCE_DIR" ]; then
     cp -r "$DOCS_SOURCE_DIR/images"/* "$OUTPUT_DIR/docs/images/" 2>/dev/null || true
     cp -r "$DOCS_SOURCE_DIR/api"/*.md "$OUTPUT_DIR/docs/api/" 2>/dev/null || true
     
-    # Copy main docs README if it exists
-    [ -f "$DOCS_SOURCE_DIR/README.md" ] && cp "$DOCS_SOURCE_DIR/README.md" "$OUTPUT_DIR/docs/README.md"
+    # Copy root-level docs markdown files
+    # Use nullglob pattern to avoid processing literal '*.md' if no files match
+    shopt -s nullglob
+    for file in "$DOCS_SOURCE_DIR"/*.md; do
+        if [ -f "$file" ]; then
+            cp "$file" "$OUTPUT_DIR/docs/" 2>/dev/null || true
+        fi
+    done
+    shopt -u nullglob
     
     echo "Documentation copied successfully!"
     
@@ -121,6 +128,8 @@ if [ -d "$DOCS_SOURCE_DIR" ]; then
             find "$OUTPUT_DIR/docs/implementation" -name "*.md" -type f ! -name "README.md" -delete 2>/dev/null || true
             find "$OUTPUT_DIR/docs/user" -name "*.md" -type f ! -name "README.md" -delete 2>/dev/null || true
             find "$OUTPUT_DIR/docs/api" -name "*.md" -type f ! -name "README.md" -delete 2>/dev/null || true
+            # Remove root-level markdown files after conversion (except README.md)
+            find "$OUTPUT_DIR/docs" -maxdepth 1 -name "*.md" -type f ! -name "README.md" -delete 2>/dev/null || true
             
             echo "Markdown conversion completed!"
         else
