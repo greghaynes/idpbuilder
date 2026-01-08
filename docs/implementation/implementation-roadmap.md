@@ -399,7 +399,6 @@ if err := b.createGiteaProvider(ctx, kubeClient); err != nil {
 - [ ] Documentation is complete and accurate
 - [ ] Migration guide is available
 - [ ] Localbuild controller marked as deprecated
-- [ ] Localbuild controller marked as deprecated
 
 ---
 
