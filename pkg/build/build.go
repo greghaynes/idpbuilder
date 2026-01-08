@@ -317,6 +317,15 @@ func (b *Build) Run(ctx context.Context, recreateCluster bool) error {
 		return fmt.Errorf("creating localbuild resource: %w", err)
 	}
 
+	// Create Platform CR FIRST (before providers) so it can add owner references immediately
+	setupLog.V(1).Info("Creating platform resource")
+	if err := b.createPlatform(ctx, kubeClient); err != nil {
+		if b.statusReporter != nil {
+			b.statusReporter.FailStep("resources", err)
+		}
+		return fmt.Errorf("creating platform resource: %w", err)
+	}
+
 	// Create GiteaProvider CR for v2 architecture
 	setupLog.V(1).Info("Creating giteaprovider resource")
 	if err := b.createGiteaProvider(ctx, kubeClient); err != nil {
@@ -342,15 +351,6 @@ func (b *Build) Run(ctx context.Context, recreateCluster bool) error {
 			b.statusReporter.FailStep("resources", err)
 		}
 		return fmt.Errorf("creating nginxgateway resource: %w", err)
-	}
-
-	// Create Platform CR that references GiteaProvider, ArgoCDProvider, and NginxGateway
-	setupLog.V(1).Info("Creating platform resource")
-	if err := b.createPlatform(ctx, kubeClient); err != nil {
-		if b.statusReporter != nil {
-			b.statusReporter.FailStep("resources", err)
-		}
-		return fmt.Errorf("creating platform resource: %w", err)
 	}
 	if b.statusReporter != nil {
 		b.statusReporter.CompleteStep("resources")
