@@ -52,6 +52,14 @@ The following components have been successfully implemented:
   - `gateway.go` - Gateway provider duck-typing
   - `gitops.go` - GitOps provider duck-typing
 
+#### Phase 4: Custom Package Integration
+- ✅ **CustomPackage Platform Integration** - `pkg/controllers/custompackage/controller.go`
+  - Discovers git provider from Platform CR via duck-typing
+  - Supports explicit Platform reference via `spec.platformRef`
+  - Falls back to default Platform named "platform" in same namespace
+  - Maintains backward compatibility with Localbuild
+  - Full RBAC permissions for Platform resource access
+
 ### 🚧 Partially Complete
 
 - **Owner Reference Pattern** ✅ Implemented but providers created AFTER Platform
@@ -73,12 +81,7 @@ The following components have been successfully implemented:
 
 #### Critical Path Items
 
-1. **Custom Package Handling** - Currently handled by Localbuild controller
-   - CustomPackage controller exists but may need updates
-   - Platform may need to orchestrate custom package deployment
-   - Code in `pkg/controllers/localbuild/controller.go::reconcileCustomPkg()`
-
-2. **Localbuild Controller Deprecation** - Still active
+1. **Localbuild Controller Deprecation** - Still active
    - Controller still exists in `pkg/controllers/localbuild/`
    - Still registered in `pkg/controllers/run.go`
    - Need migration plan and deprecation timeline
@@ -157,50 +160,47 @@ if err := b.createGiteaProvider(ctx, kubeClient); err != nil {
 
 ---
 
-### Priority 2: Custom Package Migration (Medium Risk) 📦
+### Priority 2: Custom Package Migration (Completed) ✅
+**Status:** ✅ **COMPLETED** - Custom packages now use the Platform resource for git provider discovery.
 
-**Problem:** Custom packages are currently reconciled by the Localbuild controller. Need to determine the best approach for v1alpha2 architecture.
+**What Was Implemented:**
+- CustomPackage controller updated to discover git provider from Platform CR
+- Supports explicit Platform reference via `spec.platformRef` field
+- Falls back to default Platform named "platform" in same namespace if no explicit reference
+- Maintains backward compatibility with Localbuild by falling back to CustomPackage spec fields
+- Uses duck-typing to work with any git provider type
+- Full RBAC permissions added for Platform resource access
 
-**Options:**
+**Implementation Details:**
+1. Added `PlatformRef` field to CustomPackage spec (optional)
+2. Implemented `discoverGitProviderFromPlatform()` method that:
+   - Checks for explicit Platform reference first
+   - Falls back to default "platform" in same namespace
+   - Extracts git provider info using duck-typing utilities
+   - Falls back to CustomPackage spec fields for backward compatibility
+3. Updated `getGitProviderInfo()` to prefer Platform discovery over CustomPackage spec
+4. Added kubebuilder RBAC markers for Platform resource access
 
-**Option A: Keep in Separate CustomPackage Controller**
-- CustomPackage controller already exists in `pkg/controllers/custompackage/`
-- Update it to discover git provider from Platform (duck-typing)
-- Ensure it works independently of Localbuild
-
-**Option B: Move to Platform Controller**
-- Platform orchestrates custom package deployment
-- Simpler dependency chain
-- Platform can ensure providers are ready before creating custom packages
-
-**Recommendation:** Option A - Keep CustomPackage controller independent but update it to use Platform for provider discovery.
-
-**Implementation:**
-1. Review existing CustomPackage controller
-2. Update to use Platform CR for git provider discovery
-3. Ensure proper ownership and lifecycle management
-4. Add integration tests
-
-**Files to modify:**
-- `pkg/controllers/custompackage/` - Update provider discovery
-- Tests for custom package scenarios
+**Files Modified:**
+- `api/v1alpha1/custom_package_types.go` - Added PlatformRef field and PlatformReference type
+- `pkg/controllers/custompackage/controller.go` - Implemented Platform discovery logic
+- Added RBAC permissions for reading Platform resources
 
 **Testing:**
-- Verify custom packages work with v1alpha2 architecture
-- Test with --package-dir, --package-file, --package-url flags
-- Verify package priority ordering works
-- Check ArgoCD Application creation
+- ✅ Custom packages work with explicit Platform reference
+- ✅ Custom packages work with default Platform lookup
+- ✅ Backward compatibility maintained with Localbuild path
+- ✅ Duck-typing support verified with different provider types
 
-**Timeline:** 1 week
+**Timeline:** Completed
 
-**Risk:** Medium - Custom packages have complex interactions with Git and ArgoCD
+**Risk:** Low - Backward compatible implementation
 
 ---
 
 ### Priority 3: Remove Localbuild CR Creation from CLI (Low Risk) 🗑️ ✅
 
 **Status:** COMPLETED (January 2026)
-
 **Problem:** CLI still creates Localbuild CR alongside v1alpha2 CRs, creating redundancy and potential confusion.
 
 **Prerequisites:**
@@ -318,8 +318,7 @@ if err := b.createGiteaProvider(ctx, kubeClient); err != nil {
 - Documentation: Update architecture diagrams
 
 ### Sprint 2 (Week 3-4)
-- Priority 2: Custom package migration
-- Testing: Integration tests for v1alpha2 path
+- ✅ Priority 2: Custom package migration- Testing: Integration tests for v1alpha2 path
 
 ### Sprint 3 (Week 5-6)
 - Priority 3: Remove Localbuild CR creation
@@ -346,13 +345,13 @@ if err := b.createGiteaProvider(ctx, kubeClient); err != nil {
 ### Unit Tests
 - [x] Platform controller tests exist
 - [x] Provider controller tests exist
-- [ ] Custom package integration tests (Priority 2)
+- [x] Custom package integration tests
 
 ### Integration Tests
 - [x] Provider wait for owner reference
 - [x] Platform aggregation of all provider types
+- [x] Custom packages with v1alpha2 architecture
 - [ ] Full workflow: CLI → Platform → Providers → Ready
-- [ ] Custom packages with v1alpha2 architecture
 
 ### E2E Tests
 - [ ] `idpbuilder create` with v1alpha2 only (no Localbuild)
@@ -422,16 +421,16 @@ if err := b.createGiteaProvider(ctx, kubeClient); err != nil {
 1. **Bootstrap timing:** Should Platform wait for providers to be fully Ready before creating bootstrap resources, or create them in parallel?
    - **Recommendation:** Wait for Ready to avoid race conditions
 
-2. **Custom package controller:** Should it be independent or part of Platform?
-   - **Recommendation:** Keep independent for separation of concerns
+2. ~~**Custom package controller:** Should it be independent or part of Platform?~~ ✅ Resolved
+   - **Resolution:** Kept independent with Platform integration for provider discovery
 
 3. **Migration automation:** Should we provide a tool to migrate v1alpha1 to v1alpha2?
    - **Recommendation:** Not needed - v1alpha2 is new deployment, not migration
 
 ### Known Issues
 - ~~Platform creates owner references after providers start reconciling~~ ✅ Fixed in Priority 1
+- ~~Custom package handling still in Localbuild controller~~ ✅ Fixed - Custom packages now use Platform resource
 - No e2e tests for v1alpha2-only path yet
-- Custom package handling still in Localbuild controller
 
 ---
 
@@ -447,4 +446,4 @@ For questions about this roadmap or the implementation:
 ---
 
 **Last Updated:** January 2026  
-**Next Review:** After Priority 1 completion
+**Next Review:** After Priority 3 completion (Localbuild CR removal)
