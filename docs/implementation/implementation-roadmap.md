@@ -62,7 +62,7 @@ The following components have been successfully implemented:
 
 ### ✅ Recently Completed
 
-#### Priority 4: Localbuild CR Creation Removed (January 2026)
+#### Priority 3: Localbuild CR Creation Removed (January 2026)
 - ✅ **CLI no longer creates Localbuild CR** - Removed from `pkg/build/build.go`
 - ✅ **Only v1alpha2 CRs created** - Platform, GiteaProvider, ArgoCDProvider, NginxGateway
 - ✅ **Compatibility check removed** - `isCompatible()` function and related code deleted
@@ -73,17 +73,12 @@ The following components have been successfully implemented:
 
 #### Critical Path Items
 
-1. **Bootstrap Repository Creation** - Currently handled by Localbuild controller
-   - Platform should create GitRepository CRs for bootstrap apps (argocd, gitea, nginx)
-   - Platform should create ArgoCD Application CRs
-   - Code exists in `pkg/controllers/localbuild/controller.go` but needs to be moved
-
-2. **Custom Package Handling** - Currently handled by Localbuild controller
+1. **Custom Package Handling** - Currently handled by Localbuild controller
    - CustomPackage controller exists but may need updates
    - Platform may need to orchestrate custom package deployment
    - Code in `pkg/controllers/localbuild/controller.go::reconcileCustomPkg()`
 
-3. **Localbuild Controller Deprecation** - Still active
+2. **Localbuild Controller Deprecation** - Still active
    - Controller still exists in `pkg/controllers/localbuild/`
    - Still registered in `pkg/controllers/run.go`
    - Need migration plan and deprecation timeline
@@ -133,49 +128,36 @@ if err := b.createGiteaProvider(ctx, kubeClient); err != nil {
 
 ---
 
-### Priority 2: Move Bootstrap Repository Creation to Platform (Medium Risk) 🔧
+### Priority 2: Platform Controller Orchestration (Completed) ✅
 
-**Problem:** Platform controller currently only aggregates status. It should also create the bootstrap GitRepository and ArgoCD Application CRs, which is currently done by the Localbuild controller.
+**Status:** ✅ **COMPLETED** - Platform controller orchestrates provider installation via owner references.
 
-**Background:** Bootstrap repositories are the initial Git repos for core components (argocd, gitea, nginx) that ArgoCD uses to manage the platform.
+**What Was Implemented:**
+- Platform controller sets owner references on provider CRs
+- Platform controller aggregates status from all providers (Git, Gateway, GitOps)
+- Platform reaches "Ready" state when all providers are Ready
+- Uses duck-typing for provider independence
 
-**Implementation Steps:**
+**What Was NOT Implemented (and should not be):**
+- Bootstrap repository creation was initially planned but removed due to circular dependency
+- ArgoCD, Gitea, and Nginx are "Essential Packages" installed by their provider controllers, not via GitOps
+- Bootstrap GitRepository and Application CRs should be created by users or custom packages, not Platform controller
 
-1. **Add bootstrap creation to Platform controller** (`pkg/controllers/platform/platform_controller.go`)
-   - Add `createBootstrapRepositories()` method
-   - Call it after all providers are Ready (phase == "Ready")
-   - Only create if they don't already exist
-
-2. **Move code from Localbuild controller:**
-   - Move `reconcileGitRepo()` from `pkg/controllers/localbuild/controller.go` (lines ~739-849)
-   - Move `reconcileEmbeddedApp()` (lines ~362-415)
-   - Move `ReconcileArgoAppsWithGitea()` (lines ~280-360)
-   - Adapt to use duck-typed git provider instead of hardcoded Gitea
-
-3. **Add RBAC permissions:**
-```go
-//+kubebuilder:rbac:groups=idpbuilder.cnoe.io,resources=gitrepositories,verbs=get;list;watch;create;update;patch
-//+kubebuilder:rbac:groups=argoproj.io,resources=applications,verbs=get;list;watch;create;update;patch
-```
-
-**Files to modify:**
-- `pkg/controllers/platform/platform_controller.go` - Add bootstrap creation (~200 lines)
-- Move helper functions from localbuild controller
+**Files modified:**
+- `pkg/controllers/platform/platform_controller.go` - Owner reference setup and status aggregation
 
 **Testing:**
-- Verify GitRepository CRs are created when Platform becomes Ready
-- Verify ArgoCD Applications are created
-- Verify bootstrap apps sync successfully
-- Check that Gitea repositories are populated
-- Run e2e tests
+- ✅ Unit tests for provider aggregation
+- ✅ Platform reaches Ready when all providers are Ready
+- ✅ Duck-typing support verified
 
-**Timeline:** 1 week
+**Timeline:** Completed January 2026
 
-**Risk:** Medium - Moving significant logic, but well-tested in Localbuild
+**Risk:** Low - Simple orchestration, no complex logic
 
 ---
 
-### Priority 3: Custom Package Migration (Medium Risk) 📦
+### Priority 2: Custom Package Migration (Medium Risk) 📦
 
 **Problem:** Custom packages are currently reconciled by the Localbuild controller. Need to determine the best approach for v1alpha2 architecture.
 
@@ -215,15 +197,14 @@ if err := b.createGiteaProvider(ctx, kubeClient); err != nil {
 
 ---
 
-### Priority 4: Remove Localbuild CR Creation from CLI (Low Risk) 🗑️ ✅
+### Priority 3: Remove Localbuild CR Creation from CLI (Low Risk) 🗑️ ✅
 
 **Status:** COMPLETED (January 2026)
 
 **Problem:** CLI still creates Localbuild CR alongside v1alpha2 CRs, creating redundancy and potential confusion.
 
 **Prerequisites:**
-- Priority 2 complete (bootstrap repositories in Platform)
-- Priority 3 complete (custom packages working)
+- Priority 2 complete (custom packages working)
 - All integration tests passing with v1alpha2 path
 
 **Implementation:** ✅ COMPLETED
@@ -259,12 +240,12 @@ if err := b.createGiteaProvider(ctx, kubeClient); err != nil {
 
 ---
 
-### Priority 5: Deprecate Localbuild Controller (Low Risk) 📝
+### Priority 4: Deprecate Localbuild Controller (Low Risk) 📝
 
 **Problem:** Localbuild controller is no longer needed once v1alpha2 architecture is fully operational.
 
 **Prerequisites:**
-- Priority 4 complete (CLI doesn't create Localbuild CRs)
+- Priority 3 complete (CLI doesn't create Localbuild CRs)
 - Multiple releases with v1alpha2 architecture stable
 - Migration documentation complete
 
@@ -296,7 +277,7 @@ if err := b.createGiteaProvider(ctx, kubeClient); err != nil {
 
 ---
 
-### Priority 6: Documentation Updates (Ongoing) 📚
+### Priority 5: Documentation Updates (Ongoing) 📚
 
 **Continuous Updates Needed:**
 
@@ -333,17 +314,16 @@ if err := b.createGiteaProvider(ctx, kubeClient); err != nil {
 
 ### Sprint 1 (Week 1-2)
 - ✅ Priority 1: Fix provider creation order
-- ✅ Start Priority 2: Platform bootstrap creation
+- ✅ Priority 2: Platform controller orchestration (owner references and status aggregation)
 - Documentation: Update architecture diagrams
 
 ### Sprint 2 (Week 3-4)
-- ✅ Complete Priority 2: Platform bootstrap creation
-- ✅ Priority 3: Custom package migration
+- Priority 2: Custom package migration
 - Testing: Integration tests for v1alpha2 path
 
 ### Sprint 3 (Week 5-6)
-- ✅ Priority 4: Remove Localbuild CR creation
-- ✅ Priority 5A: Mark Localbuild as deprecated
+- Priority 3: Remove Localbuild CR creation
+- Priority 4A: Mark Localbuild as deprecated
 - Testing: Full e2e test suite
 - Documentation: Migration guide
 
@@ -354,10 +334,10 @@ if err := b.createGiteaProvider(ctx, kubeClient); err != nil {
 - Release planning
 
 ### Future (After 2+ stable releases)
-- ✅ Priority 5B: Remove Localbuild controller
+- Priority 4B: Remove Localbuild controller
 - Cloud provider implementations (AWS, Azure, GCP)
 
-**Total Timeline:** ~6-8 weeks for core migration (Priorities 1-4)
+**Total Timeline:** ~6-8 weeks for core migration (Priorities 1-3)
 
 ---
 
@@ -366,13 +346,12 @@ if err := b.createGiteaProvider(ctx, kubeClient); err != nil {
 ### Unit Tests
 - [x] Platform controller tests exist
 - [x] Provider controller tests exist
-- [ ] Bootstrap repository creation tests (Priority 2)
-- [ ] Custom package integration tests (Priority 3)
+- [ ] Custom package integration tests (Priority 2)
 
 ### Integration Tests
 - [x] Provider wait for owner reference
 - [x] Platform aggregation of all provider types
-- [ ] Full workflow: CLI → Platform → Providers → Bootstrap → Ready
+- [ ] Full workflow: CLI → Platform → Providers → Ready
 - [ ] Custom packages with v1alpha2 architecture
 
 ### E2E Tests
@@ -390,7 +369,8 @@ if err := b.createGiteaProvider(ctx, kubeClient); err != nil {
 
 ## Success Criteria
 
-- [ ] Platform controller creates bootstrap repositories
+- [x] Platform controller orchestrates provider installation via owner references
+- [x] Platform controller aggregates provider status
 - [ ] Custom packages work with v1alpha2 architecture  
 - [x] CLI creates only v1alpha2 CRs (no Localbuild) ✅ **COMPLETED**
 - [ ] All integration tests pass
@@ -410,7 +390,6 @@ if err := b.createGiteaProvider(ctx, kubeClient); err != nil {
 | Performance regression | Medium | Low | Benchmark and compare, optimize as needed |
 | Missing functionality | High | Medium | Comprehensive feature parity checklist, thorough testing |
 | Complex migration | Medium | Medium | Detailed step-by-step guide, automation where possible |
-| Bootstrap creation issues | High | Low | Reuse well-tested code from Localbuild, extensive testing |
 | Custom package breakage | Medium | Medium | Maintain backward compatibility, test all package scenarios |
 
 ---
@@ -450,9 +429,9 @@ if err := b.createGiteaProvider(ctx, kubeClient); err != nil {
    - **Recommendation:** Not needed - v1alpha2 is new deployment, not migration
 
 ### Known Issues
-- Platform creates owner references after providers start reconciling (Priority 1 addresses this)
+- ~~Platform creates owner references after providers start reconciling~~ ✅ Fixed in Priority 1
 - No e2e tests for v1alpha2-only path yet
-- Bootstrap repository creation still in Localbuild controller
+- Custom package handling still in Localbuild controller
 
 ---
 
