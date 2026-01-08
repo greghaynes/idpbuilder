@@ -148,14 +148,6 @@ func (r *PlatformReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{RequeueAfter: defaultRequeueTime}, nil
 	}
 
-	// NOTE: Bootstrap repository creation removed - it was creating a circular dependency
-	// where ArgoCD would try to install itself via GitOps.
-	// ArgoCD, Gitea, and Nginx are "Essential Packages" installed directly by their
-	// respective provider controllers (ArgoCDProvider, GiteaProvider, NginxGateway),
-	// not via ArgoCD GitOps applications.
-	// User applications should be managed by creating separate GitRepository and Application CRs,
-	// not through the Platform controller.
-
 	logger.Info("Platform reconciliation complete", "phase", platform.Status.Phase)
 	return ctrl.Result{}, nil
 }
