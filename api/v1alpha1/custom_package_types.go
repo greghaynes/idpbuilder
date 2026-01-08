@@ -28,17 +28,40 @@ type CustomPackageList struct {
 // CustomPackageSpec controls the installation of the custom applications.
 type CustomPackageSpec struct {
 	ArgoCD ArgoCDPackageSpec `json:"argoCD,omitempty"`
+
+	// PlatformRef references the Platform resource to use for git provider configuration.
+	// If not specified, the controller will look for a Platform named "platform" in the same namespace.
+	// If no Platform is found, it falls back to the GitServerURL and InternalGitServeURL fields.
+	// +optional
+	PlatformRef *PlatformReference `json:"platformRef,omitempty"`
+
 	// GitServerURL specifies the base URL for the git server for API calls.
 	// for example, https://gitea.cnoe.localtest.me:8443
-	GitServerURL           string          `json:"gitServerURL"`
-	GitServerAuthSecretRef SecretReference `json:"gitServerAuthSecretRef"`
+	// Deprecated: Use PlatformRef instead. This field is kept for backward compatibility.
+	// +optional
+	GitServerURL           string          `json:"gitServerURL,omitempty"`
+	GitServerAuthSecretRef SecretReference `json:"gitServerAuthSecretRef,omitempty"`
 	// InternalGitServeURL specifies the base URL for the git server accessible within the cluster.
 	// for example, http://my-gitea-http.gitea.svc.cluster.local:3000
-	InternalGitServeURL string               `json:"internalGitServeURL"`
+	// Deprecated: Use PlatformRef instead. This field is kept for backward compatibility.
+	// +optional
+	InternalGitServeURL string               `json:"internalGitServeURL,omitempty"`
 	RemoteRepository    RemoteRepositorySpec `json:"remoteRepository"`
 	// Replicate specifies whether to replicate remote or local contents to the local gitea server.
 	// +kubebuilder:default:=false
 	Replicate bool `json:"replicate"`
+}
+
+// PlatformReference references a Platform resource
+type PlatformReference struct {
+	// Name is the name of the Platform resource
+	// +kubebuilder:validation:Required
+	Name string `json:"name"`
+
+	// Namespace is the namespace of the Platform resource.
+	// If not specified, defaults to the same namespace as the CustomPackage.
+	// +optional
+	Namespace string `json:"namespace,omitempty"`
 }
 
 // RemoteRepositorySpec specifies information about remote repositories.

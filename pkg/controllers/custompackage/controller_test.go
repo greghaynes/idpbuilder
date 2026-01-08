@@ -824,7 +824,7 @@ func TestDiscoverGitProviderFromPlatform(t *testing.T) {
 	)
 	require.NoError(t, sb.AddToScheme(s))
 
-	t.Run("discover git provider from Platform CR", func(t *testing.T) {
+	t.Run("discover git provider with explicit Platform reference", func(t *testing.T) {
 		ctx := context.Background()
 
 		// Create a GiteaProvider CR
@@ -857,6 +857,93 @@ func TestDiscoverGitProviderFromPlatform(t *testing.T) {
 		// Create a Platform CR referencing the GiteaProvider
 		platform := &v1alpha2.Platform{
 			ObjectMeta: metav1.ObjectMeta{
+				Name:      "my-platform",
+				Namespace: "test-ns",
+			},
+			Spec: v1alpha2.PlatformSpec{
+				Domain: "test.com",
+				Components: v1alpha2.PlatformComponents{
+					GitProviders: []v1alpha2.ProviderReference{
+						{
+							Name:      "gitea",
+							Kind:      "GiteaProvider",
+							Namespace: "test-ns",
+						},
+					},
+				},
+			},
+		}
+
+		// Create a CustomPackage with explicit Platform reference
+		customPkg := &v1alpha1.CustomPackage{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-pkg",
+				Namespace: "test-ns",
+			},
+			Spec: v1alpha1.CustomPackageSpec{
+				PlatformRef: &v1alpha1.PlatformReference{
+					Name: "my-platform",
+				},
+			},
+		}
+
+		// Create fake client with initial objects
+		fakeClient := fake.NewClientBuilder().
+			WithScheme(s).
+			WithObjects(giteaProvider, platform).
+			Build()
+
+		reconciler := &Reconciler{
+			Client:   fakeClient,
+			Recorder: record.NewFakeRecorder(10),
+			Scheme:   s,
+		}
+
+		// Test discovery with explicit reference
+		providerInfo, err := reconciler.discoverGitProviderFromPlatform(ctx, customPkg)
+		require.NoError(t, err)
+		require.NotNil(t, providerInfo)
+
+		assert.Equal(t, "https://gitea.test.com", providerInfo.externalURL)
+		assert.Equal(t, "http://gitea.svc.cluster.local:3000", providerInfo.internalURL)
+		assert.Equal(t, "gitea-credentials", providerInfo.secretName)
+		assert.Equal(t, "test-ns", providerInfo.secretNamespace)
+		assert.Equal(t, v1alpha1.GiteaAdminUserName, providerInfo.organizationName)
+	})
+
+	t.Run("discover git provider with default Platform", func(t *testing.T) {
+		ctx := context.Background()
+
+		// Create a GiteaProvider CR
+		giteaProvider := &v1alpha2.GiteaProvider{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "gitea",
+				Namespace: "test-ns",
+			},
+			Spec: v1alpha2.GiteaProviderSpec{
+				Namespace: "gitea",
+				Host:      "gitea.test.com",
+			},
+			Status: v1alpha2.GiteaProviderStatus{
+				Endpoint:         "https://gitea.test.com",
+				InternalEndpoint: "http://gitea.svc.cluster.local:3000",
+				CredentialsSecretRef: &v1alpha2.SecretReference{
+					Name:      "gitea-credentials",
+					Namespace: "test-ns",
+					Key:       "password",
+				},
+				Conditions: []metav1.Condition{
+					{
+						Type:   "Ready",
+						Status: metav1.ConditionTrue,
+					},
+				},
+			},
+		}
+
+		// Create a default Platform CR named "platform"
+		platform := &v1alpha2.Platform{
+			ObjectMeta: metav1.ObjectMeta{
 				Name:      "platform",
 				Namespace: "test-ns",
 			},
@@ -874,6 +961,17 @@ func TestDiscoverGitProviderFromPlatform(t *testing.T) {
 			},
 		}
 
+		// Create a CustomPackage without explicit Platform reference
+		customPkg := &v1alpha1.CustomPackage{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-pkg",
+				Namespace: "test-ns",
+			},
+			Spec: v1alpha1.CustomPackageSpec{
+				// No PlatformRef - should use default "platform"
+			},
+		}
+
 		// Create fake client with initial objects
 		fakeClient := fake.NewClientBuilder().
 			WithScheme(s).
@@ -886,20 +984,28 @@ func TestDiscoverGitProviderFromPlatform(t *testing.T) {
 			Scheme:   s,
 		}
 
-		// Test discovery
-		providerInfo, err := reconciler.discoverGitProviderFromPlatform(ctx, "test-ns")
+		// Test discovery with default platform
+		providerInfo, err := reconciler.discoverGitProviderFromPlatform(ctx, customPkg)
 		require.NoError(t, err)
 		require.NotNil(t, providerInfo)
 
 		assert.Equal(t, "https://gitea.test.com", providerInfo.externalURL)
 		assert.Equal(t, "http://gitea.svc.cluster.local:3000", providerInfo.internalURL)
-		assert.Equal(t, "gitea-credentials", providerInfo.secretName)
-		assert.Equal(t, "test-ns", providerInfo.secretNamespace)
-		assert.Equal(t, v1alpha1.GiteaAdminUserName, providerInfo.organizationName)
 	})
 
-	t.Run("no Platform CR in namespace", func(t *testing.T) {
+	t.Run("no Platform CR - fallback to spec", func(t *testing.T) {
 		ctx := context.Background()
+
+		// Create a CustomPackage without Platform reference and no default Platform
+		customPkg := &v1alpha1.CustomPackage{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-pkg",
+				Namespace: "test-ns",
+			},
+			Spec: v1alpha1.CustomPackageSpec{
+				// No PlatformRef and no default "platform" exists
+			},
+		}
 
 		fakeClient := fake.NewClientBuilder().
 			WithScheme(s).
@@ -912,12 +1018,45 @@ func TestDiscoverGitProviderFromPlatform(t *testing.T) {
 		}
 
 		// Test discovery with no Platform
-		providerInfo, err := reconciler.discoverGitProviderFromPlatform(ctx, "test-ns")
+		providerInfo, err := reconciler.discoverGitProviderFromPlatform(ctx, customPkg)
 		require.NoError(t, err)
 		assert.Nil(t, providerInfo) // Should return nil for backward compatibility
 	})
 
-	t.Run("Platform CR with no git providers", func(t *testing.T) {
+	t.Run("explicit Platform reference not found - error", func(t *testing.T) {
+		ctx := context.Background()
+
+		// Create a CustomPackage with explicit Platform reference that doesn't exist
+		customPkg := &v1alpha1.CustomPackage{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-pkg",
+				Namespace: "test-ns",
+			},
+			Spec: v1alpha1.CustomPackageSpec{
+				PlatformRef: &v1alpha1.PlatformReference{
+					Name: "nonexistent-platform",
+				},
+			},
+		}
+
+		fakeClient := fake.NewClientBuilder().
+			WithScheme(s).
+			Build()
+
+		reconciler := &Reconciler{
+			Client:   fakeClient,
+			Recorder: record.NewFakeRecorder(10),
+			Scheme:   s,
+		}
+
+		// Test discovery with nonexistent explicit reference - should error
+		providerInfo, err := reconciler.discoverGitProviderFromPlatform(ctx, customPkg)
+		require.Error(t, err)
+		assert.Nil(t, providerInfo)
+		assert.Contains(t, err.Error(), "not found")
+	})
+
+	t.Run("Platform CR with no git providers - error", func(t *testing.T) {
 		ctx := context.Background()
 
 		// Create a Platform CR with no git providers
@@ -932,6 +1071,17 @@ func TestDiscoverGitProviderFromPlatform(t *testing.T) {
 			},
 		}
 
+		// Create a CustomPackage without explicit reference (will use default)
+		customPkg := &v1alpha1.CustomPackage{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-pkg",
+				Namespace: "test-ns",
+			},
+			Spec: v1alpha1.CustomPackageSpec{
+				// No PlatformRef - will try default "platform"
+			},
+		}
+
 		fakeClient := fake.NewClientBuilder().
 			WithScheme(s).
 			WithObjects(platform).
@@ -943,10 +1093,11 @@ func TestDiscoverGitProviderFromPlatform(t *testing.T) {
 			Scheme:   s,
 		}
 
-		// Test discovery
-		providerInfo, err := reconciler.discoverGitProviderFromPlatform(ctx, "test-ns")
-		require.NoError(t, err)
-		assert.Nil(t, providerInfo) // Should return nil when no git providers configured
+		// Test discovery - should error since platform has no git providers
+		providerInfo, err := reconciler.discoverGitProviderFromPlatform(ctx, customPkg)
+		require.Error(t, err)
+		assert.Nil(t, providerInfo)
+		assert.Contains(t, err.Error(), "no git providers")
 	})
 
 	t.Run("fallback to CustomPackage spec when no Platform", func(t *testing.T) {

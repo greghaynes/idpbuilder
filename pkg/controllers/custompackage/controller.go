@@ -228,32 +228,55 @@ type gitProviderInfo struct {
 	organizationName string
 }
 
-// discoverGitProviderFromPlatform discovers the git provider from the Platform CR in the same namespace
+// discoverGitProviderFromPlatform discovers the git provider from a Platform CR
+// It first checks if the CustomPackage has an explicit PlatformRef.
+// If not, it tries to find a Platform named "platform" in the same namespace.
 // Returns nil if no Platform or no git provider is found (backward compatibility with Localbuild)
-func (r *Reconciler) discoverGitProviderFromPlatform(ctx context.Context, namespace string) (*gitProviderInfo, error) {
+func (r *Reconciler) discoverGitProviderFromPlatform(ctx context.Context, resource *v1alpha1.CustomPackage) (*gitProviderInfo, error) {
 	logger := log.FromContext(ctx)
 
-	// List Platform CRs in the namespace
-	platformList := &v1alpha2.PlatformList{}
-	err := r.Client.List(ctx, platformList, client.InNamespace(namespace))
+	var platformName, platformNamespace string
+
+	// Check if there's an explicit platform reference
+	if resource.Spec.PlatformRef != nil {
+		platformName = resource.Spec.PlatformRef.Name
+		platformNamespace = resource.Spec.PlatformRef.Namespace
+		if platformNamespace == "" {
+			platformNamespace = resource.Namespace
+		}
+		logger.V(1).Info("Using explicit Platform reference", "name", platformName, "namespace", platformNamespace)
+	} else {
+		// Try to find a default Platform named "platform" in the same namespace
+		platformName = "platform"
+		platformNamespace = resource.Namespace
+		logger.V(1).Info("No explicit Platform reference, trying default", "name", platformName, "namespace", platformNamespace)
+	}
+
+	// Fetch the Platform CR
+	platform := &v1alpha2.Platform{}
+	err := r.Client.Get(ctx, types.NamespacedName{
+		Name:      platformName,
+		Namespace: platformNamespace,
+	}, platform)
+
 	if err != nil {
-		return nil, fmt.Errorf("listing platforms: %w", err)
+		if errors.IsNotFound(err) {
+			if resource.Spec.PlatformRef != nil {
+				// Explicit reference not found - this is an error
+				return nil, fmt.Errorf("referenced Platform %s/%s not found", platformNamespace, platformName)
+			}
+			// Default Platform not found - fall back to CustomPackage spec for backward compatibility
+			logger.V(1).Info("Default Platform not found, falling back to CustomPackage spec", "name", platformName, "namespace", platformNamespace)
+			return nil, nil
+		}
+		return nil, fmt.Errorf("getting Platform %s/%s: %w", platformNamespace, platformName, err)
 	}
 
-	if len(platformList.Items) == 0 {
-		// No Platform CR found - this is OK for backward compatibility with Localbuild
-		logger.V(1).Info("No Platform CR found in namespace, falling back to CustomPackage spec", "namespace", namespace)
-		return nil, nil
-	}
-
-	// Use the first Platform CR found
-	platform := &platformList.Items[0]
 	logger.V(1).Info("Found Platform CR", "name", platform.Name, "namespace", platform.Namespace)
 
 	// Get the first git provider from the Platform
 	if len(platform.Spec.Components.GitProviders) == 0 {
-		logger.V(1).Info("No git providers configured in Platform, falling back to CustomPackage spec")
-		return nil, nil
+		return nil, fmt.Errorf("Platform %s/%s has no git providers configured", platformNamespace, platformName)
 	}
 
 	gitProviderRef := platform.Spec.Components.GitProviders[0]
@@ -276,8 +299,7 @@ func (r *Reconciler) discoverGitProviderFromPlatform(ctx context.Context, namesp
 
 	if err != nil {
 		if errors.IsNotFound(err) {
-			logger.Info("Git provider not found, falling back to CustomPackage spec", "name", gitProviderRef.Name)
-			return nil, nil
+			return nil, fmt.Errorf("git provider %s/%s referenced by Platform not found", gitProviderRef.Namespace, gitProviderRef.Name)
 		}
 		return nil, fmt.Errorf("getting git provider %s: %w", gitProviderRef.Name, err)
 	}
@@ -316,8 +338,8 @@ func (r *Reconciler) discoverGitProviderFromPlatform(ctx context.Context, namesp
 
 // getGitProviderInfo gets git provider information, preferring Platform CR discovery over CustomPackage spec
 func (r *Reconciler) getGitProviderInfo(ctx context.Context, resource *v1alpha1.CustomPackage) (*gitProviderInfo, error) {
-	// Try to discover from Platform first
-	platformProvider, err := r.discoverGitProviderFromPlatform(ctx, resource.Namespace)
+	// Try to discover from Platform first (either explicit ref or default "platform")
+	platformProvider, err := r.discoverGitProviderFromPlatform(ctx, resource)
 	if err != nil {
 		return nil, err
 	}
