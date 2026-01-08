@@ -3,15 +3,9 @@ package platform
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
-	argov1alpha1 "github.com/cnoe-io/argocd-api/api/argo/application/v1alpha1"
-	"github.com/cnoe-io/idpbuilder/api/v1alpha1"
 	"github.com/cnoe-io/idpbuilder/api/v1alpha2"
-	"github.com/cnoe-io/idpbuilder/globals"
-	"github.com/cnoe-io/idpbuilder/pkg/resources/localbuild"
-	"github.com/cnoe-io/idpbuilder/pkg/util"
 	"github.com/cnoe-io/idpbuilder/pkg/util/provider"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -27,10 +21,8 @@ import (
 )
 
 const (
-	platformFinalizer         = "platform.idpbuilder.cnoe.io/finalizer"
-	defaultRequeueTime        = time.Second * 30
-	defaultArgoCDProjectName  = "default"
-	bootstrapReposCreatedFlag = "platform.idpbuilder.cnoe.io/bootstrap-repos-created"
+	platformFinalizer  = "platform.idpbuilder.cnoe.io/finalizer"
+	defaultRequeueTime = time.Second * 30
 )
 
 // PlatformReconciler reconciles a Platform object
@@ -45,8 +37,6 @@ type PlatformReconciler struct {
 //+kubebuilder:rbac:groups=idpbuilder.cnoe.io,resources=giteaproviders,verbs=get;list;watch;update;patch
 //+kubebuilder:rbac:groups=idpbuilder.cnoe.io,resources=nginxgateways,verbs=get;list;watch;update;patch
 //+kubebuilder:rbac:groups=idpbuilder.cnoe.io,resources=argocdproviders,verbs=get;list;watch;update;patch
-//+kubebuilder:rbac:groups=idpbuilder.cnoe.io,resources=gitrepositories,verbs=get;list;watch;create;update;patch
-//+kubebuilder:rbac:groups=argoproj.io,resources=applications,verbs=get;list;watch;create;update;patch
 
 // Reconcile is part of the main kubernetes reconciliation loop
 func (r *PlatformReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -158,11 +148,13 @@ func (r *PlatformReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{RequeueAfter: defaultRequeueTime}, nil
 	}
 
-	// Create bootstrap repositories and ArgoCD Applications after all providers are Ready
-	if err := r.createBootstrapResources(ctx, platform); err != nil {
-		logger.Error(err, "Failed to create bootstrap resources")
-		return ctrl.Result{RequeueAfter: defaultRequeueTime}, nil
-	}
+	// NOTE: Bootstrap repository creation removed - it was creating a circular dependency
+	// where ArgoCD would try to install itself via GitOps.
+	// ArgoCD, Gitea, and Nginx are "Essential Packages" installed directly by their
+	// respective provider controllers (ArgoCDProvider, GiteaProvider, NginxGateway),
+	// not via ArgoCD GitOps applications.
+	// User applications should be managed by creating separate GitRepository and Application CRs,
+	// not through the Platform controller.
 
 	logger.Info("Platform reconciliation complete", "phase", platform.Status.Phase)
 	return ctrl.Result{}, nil
@@ -463,254 +455,6 @@ func (r *PlatformReconciler) handleDeletion(ctx context.Context, platform *v1alp
 	}
 
 	return ctrl.Result{}, nil
-}
-
-// createBootstrapResources creates bootstrap GitRepository and ArgoCD Application CRs
-func (r *PlatformReconciler) createBootstrapResources(ctx context.Context, platform *v1alpha2.Platform) error {
-	logger := log.FromContext(ctx)
-
-	// Check if we've already created bootstrap resources
-	if platform.Annotations != nil {
-		if _, ok := platform.Annotations[bootstrapReposCreatedFlag]; ok {
-			logger.V(1).Info("Bootstrap resources already created")
-			return nil
-		}
-	}
-
-	// Extract build name from platform name (format: {buildname}-platform)
-	buildName := strings.TrimSuffix(platform.Name, "-platform")
-	if buildName == platform.Name {
-		return fmt.Errorf("platform name does not follow expected format: {buildname}-platform")
-	}
-
-	// Get the first Git provider to use for creating repositories
-	if len(platform.Spec.Components.GitProviders) == 0 {
-		return fmt.Errorf("no git providers configured")
-	}
-
-	gitProviderRef := platform.Spec.Components.GitProviders[0]
-
-	// Fetch the Git provider to get its status
-	gitProvider := &unstructured.Unstructured{}
-	gitProvider.SetGroupVersionKind(schema.GroupVersionKind{
-		Group:   "idpbuilder.cnoe.io",
-		Version: "v1alpha2",
-		Kind:    gitProviderRef.Kind,
-	})
-
-	err := r.Get(ctx, types.NamespacedName{
-		Name:      gitProviderRef.Name,
-		Namespace: gitProviderRef.Namespace,
-	}, gitProvider)
-	if err != nil {
-		return fmt.Errorf("getting git provider %s: %w", gitProviderRef.Name, err)
-	}
-
-	// Get provider status using duck-typing
-	gitProviderStatus, err := provider.GetGitProviderStatus(gitProvider)
-	if err != nil {
-		return fmt.Errorf("getting git provider status: %w", err)
-	}
-
-	// Validate URLs
-	if err := validateGitURL(gitProviderStatus.Endpoint, "Git provider endpoint"); err != nil {
-		return err
-	}
-	if err := validateGitURL(gitProviderStatus.InternalEndpoint, "Git provider internal endpoint"); err != nil {
-		return err
-	}
-
-	// Create bootstrap repositories for core components
-	// NOTE: Currently only ArgoCD is created here. Gitea and Nginx are managed by their
-	// respective provider controllers (GiteaProvider and NginxGateway) in v1alpha2 architecture.
-	bootstrapApps := []string{v1alpha1.ArgoCDPackageName}
-
-	for _, appName := range bootstrapApps {
-		logger.V(1).Info("Creating bootstrap GitRepository", "app", appName)
-
-		// Create GitRepository CR
-		repo, err := r.createGitRepository(ctx, platform, buildName, appName, gitProviderStatus)
-		if err != nil {
-			return fmt.Errorf("creating GitRepository for %s: %w", appName, err)
-		}
-
-		// Only create ArgoCD Application if GitRepository has been reconciled and has a URL
-		// Otherwise, we'll create it on the next reconciliation
-		if repo.Status.InternalGitRepositoryUrl != "" {
-			logger.V(1).Info("Creating ArgoCD Application", "app", appName)
-			if err := r.createArgoCDApplication(ctx, platform, appName, repo); err != nil {
-				return fmt.Errorf("creating ArgoCD Application for %s: %w", appName, err)
-			}
-		} else {
-			logger.V(1).Info("GitRepository not yet reconciled, will create Application on next reconciliation", "app", appName)
-			// Don't mark as complete yet - we'll need to reconcile again
-			return nil
-		}
-	}
-
-	// Mark bootstrap resources as created
-	if platform.Annotations == nil {
-		platform.Annotations = make(map[string]string)
-	}
-	platform.Annotations[bootstrapReposCreatedFlag] = "true"
-	if err := r.Update(ctx, platform); err != nil {
-		return fmt.Errorf("updating platform annotation: %w", err)
-	}
-
-	logger.Info("Bootstrap resources created successfully")
-	return nil
-}
-
-// createGitRepository creates a GitRepository CR for a bootstrap app
-func (r *PlatformReconciler) createGitRepository(ctx context.Context, platform *v1alpha2.Platform, buildName, appName string, gitProviderStatus *provider.GitProviderStatus) (*v1alpha1.GitRepository, error) {
-	logger := log.FromContext(ctx)
-
-	repo := &v1alpha1.GitRepository{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      appName,
-			Namespace: globals.GetProjectNamespace(buildName),
-		},
-	}
-
-	_, err := controllerutil.CreateOrUpdate(ctx, r.Client, repo, func() error {
-		// Set Platform as owner (non-controller)
-		ownerRef := metav1.OwnerReference{
-			APIVersion: platform.APIVersion,
-			Kind:       platform.Kind,
-			Name:       platform.Name,
-			UID:        platform.UID,
-			Controller: func() *bool { b := false; return &b }(),
-		}
-
-		// Check if owner reference already exists
-		hasOwnerRef := false
-		for _, ref := range repo.GetOwnerReferences() {
-			if ref.UID == platform.UID {
-				hasOwnerRef = true
-				break
-			}
-		}
-
-		if !hasOwnerRef {
-			refs := repo.GetOwnerReferences()
-			refs = append(refs, ownerRef)
-			repo.SetOwnerReferences(refs)
-		}
-
-		// Set up labels
-		util.SetPackageLabels(repo)
-
-		// Get credentials secret ref from provider status
-		var secretName, secretNamespace string
-		if gitProviderStatus.CredentialsSecretRef.Name != "" {
-			secretName = gitProviderStatus.CredentialsSecretRef.Name
-			secretNamespace = gitProviderStatus.CredentialsSecretRef.Namespace
-		} else {
-			// Fallback to Gitea defaults for backward compatibility with current GiteaProvider
-			// This should be removed once all Git providers properly set CredentialsSecretRef
-			// For now, this is safe because GiteaProvider is the only implemented Git provider
-			logger.V(1).Info("Warning: Git provider credentials secret ref is not set, using Gitea defaults")
-			secretName = util.GiteaAdminSecret
-			secretNamespace = util.GiteaNamespace
-		}
-
-		repo.Spec = v1alpha1.GitRepositorySpec{
-			Source: v1alpha1.GitRepositorySource{
-				Type:            v1alpha1.SourceTypeEmbedded,
-				EmbeddedAppName: appName,
-			},
-			Provider: v1alpha1.Provider{
-				// NOTE: This uses v1alpha1 provider name, not v1alpha2 provider Kind
-				// v1alpha1.GitRepository expects provider names like "gitea" or "github"
-				// not v1alpha2 provider types like "GiteaProvider"
-				// Currently hardcoded to "gitea" because GiteaProvider is the only implemented
-				// Git provider. When GitHub or other providers are added, this will need to be
-				// derived from the provider Kind or the duck-typed provider status should include
-				// the v1alpha1 provider name.
-				Name:             v1alpha1.GitProviderGitea,
-				GitURL:           gitProviderStatus.Endpoint,
-				InternalGitURL:   gitProviderStatus.InternalEndpoint,
-				OrganizationName: v1alpha1.GiteaAdminUserName,
-			},
-			SecretRef: v1alpha1.SecretReference{
-				Name:      secretName,
-				Namespace: secretNamespace,
-			},
-		}
-
-		return nil
-	})
-
-	return repo, err
-}
-
-// createArgoCDApplication creates an ArgoCD Application CR for a bootstrap app
-func (r *PlatformReconciler) createArgoCDApplication(ctx context.Context, platform *v1alpha2.Platform, appName string, repo *v1alpha1.GitRepository) error {
-	app := &argov1alpha1.Application{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      appName,
-			Namespace: globals.ArgoCDNamespace,
-		},
-	}
-
-	_, err := controllerutil.CreateOrUpdate(ctx, r.Client, app, func() error {
-		// Set Platform as owner (non-controller)
-		ownerRef := metav1.OwnerReference{
-			APIVersion: platform.APIVersion,
-			Kind:       platform.Kind,
-			Name:       platform.Name,
-			UID:        platform.UID,
-			Controller: func() *bool { b := false; return &b }(),
-		}
-
-		// Check if owner reference already exists
-		hasOwnerRef := false
-		for _, ref := range app.GetOwnerReferences() {
-			if ref.UID == platform.UID {
-				hasOwnerRef = true
-				break
-			}
-		}
-
-		if !hasOwnerRef {
-			refs := app.GetOwnerReferences()
-			refs = append(refs, ownerRef)
-			app.SetOwnerReferences(refs)
-		}
-
-		// Set up labels
-		util.SetPackageLabels(app)
-
-		// Set Application spec
-		localbuild.SetApplicationSpec(
-			app,
-			repo.Status.InternalGitRepositoryUrl,
-			".",
-			defaultArgoCDProjectName,
-			appName,
-			nil,
-		)
-
-		return nil
-	})
-
-	return err
-}
-
-// validateGitURL validates that a Git URL is properly formatted
-func validateGitURL(url, fieldName string) error {
-	if url == "" {
-		return fmt.Errorf("%s is not set", fieldName)
-	}
-	// Validate URL format - must match the GitRepository CRD validation pattern: ^https?:\/\/.+$
-	if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
-		return fmt.Errorf("%s must start with http:// or https://, got: %s", fieldName, url)
-	}
-	// Check that there's content after the protocol (e.g., not just "http://" or "https://")
-	if url == "http://" || url == "https://" {
-		return fmt.Errorf("%s is too short: %s", fieldName, url)
-	}
-	return nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
