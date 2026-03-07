@@ -20,6 +20,7 @@ Technical specifications and architectural design documents that define how the 
 - [Pluggable and Configurable Packaging Proposal](./specs/pluggable-packages.md) - Design for flexible package installation
 - [Resource Creation Sequencing and State Transitions](./specs/resource-creation-sequencing.md) - Technical spec for resource tracking and sequencing
 - [Hyperscaler Provider Implementation Specification](./specs/hyperscaler-provider-spec.md) - Cloud provider integration design
+- [Validation and Testing Strategy](./specs/validation-testing-strategy.md) - Multi-tier testing strategy for Codespaces and CI/CD
 
 ### [Implementation Documentation](./implementation/)
 Implementation details, developer documentation, and testing information.

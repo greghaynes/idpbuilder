@@ -140,6 +140,27 @@ api-docs: crd-ref-docs ## Generate API reference documentation from CRDs.
 embedded-resources: kustomize helm
 	export PATH=$(LOCALBIN):$$PATH; ./hack/embedded-resources.sh;
 
+.PHONY: smoke
+smoke: build ## Build binary and verify CLI produces expected output (Tier 2 validation).
+	@echo "Checking binary CLI output..."
+	@./$(OUT_FILE) --help > /dev/null
+	@./$(OUT_FILE) version > /dev/null
+	@echo "Smoke tests passed"
+
+.PHONY: validate
+validate: fmt-check validate-docs build test ## Run Tiers 1-3: static analysis, binary build, and functional tests. Suitable for Codespaces.
+	@# Verify that the build did not produce uncommitted file changes
+	@git update-index --refresh || true
+	@if ! git diff-index --quiet HEAD --; then \
+		echo "git is in dirty state - files have been modified by the build"; \
+		git diff-index --name-status HEAD --; \
+		git diff HEAD; \
+		exit 1; \
+	fi
+	@echo ""
+	@echo "✅ All validation checks passed (Tiers 1-3)"
+	@echo "   Run 'make e2e' for full end-to-end validation (Tier 4, requires Docker)"
+
 .PHONY: e2e
 e2e: build
 	go test -v -p 1 -timeout 15m --tags=e2e ./tests/e2e/...

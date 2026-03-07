@@ -15,5 +15,24 @@
   },
   "remoteEnv": {
     "PATH": "${containerEnv:PATH}:/home/vscode/idpbuilder"
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "golang.go"
+      ],
+      "settings": {
+        "terminal.integrated.profiles.linux": {
+          "bash": {
+            "path": "/bin/bash"
+          }
+        }
+      }
+    },
+    "codespaces": {
+      "openFiles": [
+        "README.md"
+      ]
+    }
   }
 }

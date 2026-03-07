@@ -104,6 +104,31 @@ A design document outlining the approach for making packages installed by idpbui
 - Enable fast local development feedback loops
 - Support imperative pipelines via ArgoCD resource hooks
 
+### [Validation and Testing Strategy](./validation-testing-strategy.md)
+
+**Status:** Proposal  
+**Version:** 1.0  
+**Date:** March 2026
+
+A specification for a multi-tier validation and testing strategy that can be run remotely in GitHub Codespaces while providing significant validation that idpbuilder meets its functional requirements.
+
+**Key Topics:**
+- Four-tier validation pyramid (static analysis, binary smoke, functional/integration, e2e)
+- Mapping of functional requirements to test tiers
+- `make validate` target for fast Codespaces-friendly validation (< 5 minutes)
+- `make smoke` target for binary build verification
+- Test writing guidelines for controllers, CLI, and e2e scenarios
+- GitHub Actions workflow for automated Codespaces-style CI
+
+**Goals:**
+- Fill the gap between fast unit tests and heavy e2e tests
+- Enable meaningful validation in Codespaces without a real Kubernetes cluster
+- Align developer workflow with CI/CD pipeline validation
+
+**See also:**
+- [Test Coverage Improvement Plan](../implementation/test-coverage-improvement-plan.md) - Coverage gap analysis
+- [Implementation Roadmap](../implementation/implementation-roadmap.md) - Current implementation status
+
 ### [Hyperscaler Provider Implementation Specification](./hyperscaler-provider-spec.md)
 
 **Status:** Proposal  
