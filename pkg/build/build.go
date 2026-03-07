@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"time"
 
 	"github.com/cnoe-io/idpbuilder/api/v1alpha1"
 	"github.com/cnoe-io/idpbuilder/api/v1alpha2"
@@ -14,7 +13,6 @@ import (
 	"github.com/cnoe-io/idpbuilder/pkg/kind"
 	"github.com/cnoe-io/idpbuilder/pkg/status"
 	"github.com/cnoe-io/idpbuilder/pkg/util"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
@@ -139,36 +137,6 @@ func (b *Build) RunControllers(ctx context.Context, mgr manager.Manager, exitCh 
 	return controllers.RunControllers(ctx, mgr, exitCh, b.CancelFunc, b.exitOnSync, b.cfg, tmpDir, b.statusReporter)
 }
 
-func (b *Build) isCompatible(ctx context.Context, kubeClient client.Client) (bool, error) {
-	localBuild := v1alpha1.Localbuild{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: b.name,
-		},
-	}
-
-	err := kubeClient.Get(ctx, client.ObjectKeyFromObject(&localBuild), &localBuild)
-	if err != nil {
-		if k8serrors.IsNotFound(err) {
-			return true, nil
-		}
-		return false, err
-	}
-
-	ok := isBuildCustomizationSpecEqual(b.cfg, localBuild.Spec.BuildCustomization)
-
-	if ok {
-		return ok, nil
-	}
-
-	existing, given := localBuild.Spec.BuildCustomization, b.cfg
-	existing.SelfSignedCert = ""
-	given.SelfSignedCert = ""
-
-	return false, fmt.Errorf("provided command flags and existing configurations are incompatible. please recreate the cluster. "+
-		"existing: %+v, given: %+v",
-		existing, given)
-}
-
 func (b *Build) Run(ctx context.Context, recreateCluster bool) error {
 	// Use status reporter if available, otherwise fallback to logging
 	if b.statusReporter != nil {
@@ -257,16 +225,6 @@ func (b *Build) Run(ctx context.Context, recreateCluster bool) error {
 		b.statusReporter.CompleteStep("networking")
 	}
 
-	setupLog.V(1).Info("Checking for incompatible options from a previous run")
-	ok, err := b.isCompatible(ctx, kubeClient)
-	if err != nil {
-		setupLog.Error(err, "Error while checking incompatible flags")
-		return err
-	}
-	if !ok {
-		return err
-	}
-
 	managerExit := make(chan error)
 
 	setupLog.V(1).Info("Running controllers")
@@ -277,44 +235,6 @@ func (b *Build) Run(ctx context.Context, recreateCluster bool) error {
 
 	if b.statusReporter != nil {
 		b.statusReporter.StartStep("resources")
-	}
-	localBuild := v1alpha1.Localbuild{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: b.name,
-		},
-	}
-
-	cliStartTime := time.Now().Format(time.RFC3339Nano)
-
-	setupLog.V(1).Info("Creating localbuild resource")
-	_, err = controllerutil.CreateOrUpdate(ctx, kubeClient, &localBuild, func() error {
-		if localBuild.ObjectMeta.Annotations == nil {
-			localBuild.ObjectMeta.Annotations = map[string]string{}
-		}
-		localBuild.ObjectMeta.Annotations[v1alpha1.CliStartTimeAnnotation] = cliStartTime
-		localBuild.Spec = v1alpha1.LocalbuildSpec{
-			BuildCustomization: b.cfg,
-			PackageConfigs: v1alpha1.PackageConfigsSpec{
-				Argo: v1alpha1.ArgoPackageConfigSpec{
-					Enabled: true,
-				},
-				EmbeddedArgoApplications: v1alpha1.EmbeddedArgoApplicationsPackageConfigSpec{
-					Enabled: true,
-				},
-				CustomPackageDirs:        b.customPackageDirs,
-				CustomPackageFiles:       b.customPackageFiles,
-				CustomPackageUrls:        b.customPackageUrls,
-				CorePackageCustomization: b.packageCustomization,
-			},
-		}
-
-		return nil
-	})
-	if err != nil {
-		if b.statusReporter != nil {
-			b.statusReporter.FailStep("resources", err)
-		}
-		return fmt.Errorf("creating localbuild resource: %w", err)
 	}
 
 	// Create Platform CR FIRST (before providers) so it can add owner references immediately
@@ -377,17 +297,6 @@ func (b *Build) Run(ctx context.Context, recreateCluster bool) error {
 		return ctx.Err()
 	}
 	return nil
-}
-
-func isBuildCustomizationSpecEqual(s1, s2 v1alpha1.BuildCustomizationSpec) bool {
-	// probably ok to use cmp.Equal but keeping it simple for now
-	return s1.Protocol == s2.Protocol &&
-		s1.Host == s2.Host &&
-		s1.IngressHost == s2.IngressHost &&
-		s1.Port == s2.Port &&
-		s1.UsePathRouting == s2.UsePathRouting &&
-		s1.SelfSignedCert == s2.SelfSignedCert &&
-		s1.StaticPassword == s2.StaticPassword
 }
 
 // createGiteaProvider creates a GiteaProvider CR
