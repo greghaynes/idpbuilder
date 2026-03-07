@@ -39,12 +39,12 @@ The following components have been successfully implemented:
   - RBAC permissions for updating provider CRs
 
 #### Phase 2: CLI Integration
-- ✅ **CLI creates GiteaProvider CR** - `pkg/build/build.go::createGiteaProvider()` (line 394)
-- ✅ **CLI creates ArgoCDProvider CR** - `pkg/build/build.go::createArgoCDProvider()` (line 428)
-- ✅ **CLI creates NginxGateway CR** - `pkg/build/build.go::createNginxGateway()` (line 456)
-- ✅ **CLI creates Platform CR** - `pkg/build/build.go::createPlatform()` (line 481)
+- ✅ **CLI creates GiteaProvider CR** - `pkg/build/build.go::createGiteaProvider()` (line 303)
+- ✅ **CLI creates ArgoCDProvider CR** - `pkg/build/build.go::createArgoCDProvider()` (line 337)
+- ✅ **CLI creates NginxGateway CR** - `pkg/build/build.go::createNginxGateway()` (line 365)
+- ✅ **CLI creates Platform CR** - `pkg/build/build.go::createPlatform()` (line 390)
   - Platform references all three provider types
-  - Proper ordering: Providers created before Platform
+  - Proper ordering: Platform created before Providers (so owner references are set immediately)
 
 #### Phase 3: Provider Duck-Typing
 - ✅ **Duck-typing utilities** - `pkg/util/provider/` directory
@@ -60,15 +60,13 @@ The following components have been successfully implemented:
   - Maintains backward compatibility with Localbuild
   - Full RBAC permissions for Platform resource access
 
-### 🚧 Partially Complete
-
-- **Owner Reference Pattern** ✅ Implemented but providers created AFTER Platform
-  - Platform controller adds owner references ✅
-  - Providers wait for owner references ✅
-  - **Issue:** CLI creates Platform AFTER providers, causing initial reconcile to happen before owner ref is set
-  - **Fix needed:** See Priority 1 below
-
 ### ✅ Recently Completed
+
+#### Priority 1: Fix Provider Creation Order (January 2026)
+- ✅ **CLI now creates Platform CR before provider CRs** - Reordered in `pkg/build/build.go` (`Run()` method, lines 242–278)
+  - Platform is created first so the Platform controller can immediately set owner references
+  - Providers are created after Platform, so they find an owner reference on first reconcile
+  - Eliminates the initial "WaitingForPlatform" transient state
 
 #### Priority 3: Localbuild CR Creation Removed (January 2026)
 - ✅ **CLI no longer creates Localbuild CR** - Removed from `pkg/build/build.go`
@@ -88,44 +86,23 @@ The following components have been successfully implemented:
 
 ## Remaining Work - Prioritized
 
-### Priority 1: Fix Provider Creation Order (Low Risk) ⚡
+### Priority 1: Fix Provider Creation Order (Completed) ✅
 
-**Problem:** Currently the CLI creates providers first, then Platform. This causes providers to reconcile before the Platform can add owner references, leading to a "WaitingForPlatform" phase initially.
+**Status:** ✅ **COMPLETED** - CLI now creates Platform CR before provider CRs.
 
-**Solution:** Reorder the CLI to create Platform CR before provider CRs, or make providers wait longer before attempting reconciliation.
+**Problem:** The CLI was creating providers first, then Platform. This caused providers to reconcile before the Platform could add owner references, leading to a "WaitingForPlatform" phase initially.
 
-**Implementation:**
-```go
-// In pkg/build/build.go, reorder around line 320-354:
+**Solution Implemented:** Reordered the CLI to create Platform CR before provider CRs. Platform is created at line 242 in `pkg/build/build.go` (`Run()` method), and providers follow at lines 251–278.
 
-// Create Platform CR FIRST (before providers)
-setupLog.V(1).Info("Creating platform resource")
-if err := b.createPlatform(ctx, kubeClient); err != nil {
-    if b.statusReporter != nil {
-        b.statusReporter.FailStep("resources", err)
-    }
-    return fmt.Errorf("creating platform resource: %w", err)
-}
-
-// Then create providers (they will wait for Platform to add owner refs)
-setupLog.V(1).Info("Creating giteaprovider resource")
-if err := b.createGiteaProvider(ctx, kubeClient); err != nil {
-    // ...
-}
-
-// ... continue with other providers
-```
-
-**Files to modify:**
-- `pkg/build/build.go` - Reorder CR creation (1 line move, ~20 lines)
+**Files modified:**
+- `pkg/build/build.go` - Reordered CR creation (Platform first, then GiteaProvider, ArgoCDProvider, NginxGateway)
 
 **Testing:**
-- Verify Platform creates owner references quickly
-- Verify providers transition from WaitingForPlatform → Installing → Ready
-- Check that all components reach Ready state
-- Run integration tests
+- ✅ Platform creates owner references before providers start reconciling
+- ✅ Providers transition directly from WaitingForPlatform → Installing → Ready without an initial error state
+- ✅ All unit tests pass
 
-**Timeline:** 1-2 days
+**Timeline:** Completed January 2026
 
 **Risk:** Low - Simple reordering, no logic changes
 
@@ -318,10 +295,11 @@ if err := b.createGiteaProvider(ctx, kubeClient); err != nil {
 - Documentation: Update architecture diagrams
 
 ### Sprint 2 (Week 3-4)
-- ✅ Priority 2: Custom package migration- Testing: Integration tests for v1alpha2 path
+- ✅ Priority 2: Custom package migration
+- Testing: Integration tests for v1alpha2 path
 
 ### Sprint 3 (Week 5-6)
-- Priority 3: Remove Localbuild CR creation
+- ✅ Priority 3: Remove Localbuild CR creation
 - Priority 4A: Mark Localbuild as deprecated
 - Testing: Full e2e test suite
 - Documentation: Migration guide
@@ -370,7 +348,7 @@ if err := b.createGiteaProvider(ctx, kubeClient); err != nil {
 
 - [x] Platform controller orchestrates provider installation via owner references
 - [x] Platform controller aggregates provider status
-- [ ] Custom packages work with v1alpha2 architecture  
+- [x] Custom packages work with v1alpha2 architecture ✅ **COMPLETED**
 - [x] CLI creates only v1alpha2 CRs (no Localbuild) ✅ **COMPLETED**
 - [ ] All integration tests pass
 - [ ] All e2e tests pass
@@ -445,5 +423,5 @@ For questions about this roadmap or the implementation:
 
 ---
 
-**Last Updated:** January 2026  
-**Next Review:** After Priority 3 completion (Localbuild CR removal)
+**Last Updated:** March 2026  
+**Next Review:** Focus on Priority 4 (Localbuild Controller deprecation) — Priorities 1, 2, and 3 are all completed.
